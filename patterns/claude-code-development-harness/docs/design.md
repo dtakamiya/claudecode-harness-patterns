@@ -1095,6 +1095,7 @@ test_evidence_refs:
 ```yaml
 schema_version: 1
 run_id: run-20260714T215500
+context_id: ctx-01J2EXAMPLE
 parent_run_id: null
 phase_run_id: phase-run-TASK-004-007
 agent: tdd-generator
@@ -1128,6 +1129,8 @@ requested_gate_transition:
   to: passed
 ```
 
+`context_id`は実行基盤がAgentRun開始時に発行して改変不能に記録し、Agentによる自己申告・上書きを禁止する。`context_manifest`は入力選定の記録であり、実行コンテキストの同一性を証明する`context_id`の代用にはならない。OrchestratorはAdversarial Reviewのauthor、code-reviewer、adversarial-reviewerについて、実行基盤が発行した`run_id`と`context_id`が三者すべて異なることを機械検証し、GateRunから参照された各AgentRunの値と成果物記載値を照合する。欠落、重複、不一致はfail-closedとする。
+
 ## 10.2 競合・破損時の扱い
 
 - `expected_previous_revision`が現在値と一致しない場合は更新を拒否し、最新状態から再評価する。
@@ -1154,16 +1157,16 @@ requested_gate_transition:
 | STATE_REVISION | progress revisionとGit SHAが一致し、single writer更新に成功 | Orchestrator |
 | INTEGRATION         | 必要ITが成功、DB/Tx/設定を検証               | 実装またはIT           |
 | IMPLEMENTATION_EVALUATION | 固定されたreview targetを独立Evaluatorが評価し、テスト弱体化なし、最小実装、受入条件充足 | TDD実装 |
-| CODE_REVIEW | Code Reviewのblocking指摘ゼロ。Adversarial Review結果または承認済み理由付き除外判定が存在し、実施時はblocking指摘ゼロ | 実装 |
+| CODE_REVIEW | Code Reviewのblocking指摘ゼロ。金融分類時はAdversarial Review結果のblocking指摘ゼロ。除外は非金融かつ軽微の分類証跡とPHASE-9承認が存在 | 実装 |
 | COMPLETION          | 全要件・受入条件・テスト・文書が完了         | 該当工程               |
 
 ## 11.1 金融処理のAdversarial Review
 
 顧客資産・取引・会計・規制遵守・金融意思決定に影響する変更（残高、元帳、注文、約定、決済、送金、返金、金利、手数料、FX、監査、取引状態など）は高リスクと判定し、PHASE-9で作成者およびCode Reviewerから独立したAdversarial Reviewerを必ず起動する。Orchestratorが対象候補を判定するが自己除外はできない。金融処理に触れない軽微変更だけは、PHASE-9のAdversarial Reviewerが判定根拠と除外理由を承認した場合に限り除外できる。
 
-Adversarial Reviewerは、二重処理と冪等性、競合と処理順序、タイムアウト後の成否不明と部分障害、数値精度・丸め・通貨、締め・休場・タイムゾーン等の日付境界、内部不正と監査証跡、元帳・派生残高の照合と復旧を評価する。成果物には固定commit SHA、diff base、変更ファイル一覧と成果物hash、reviewer identity、作成者・Code Reviewerからの独立性宣言、各必須観点のPASS/FAIL/NAと根拠を含める。レビュー後に対象が変わった場合は対象を再固定して再レビューする。
+Adversarial Reviewerは、二重処理と冪等性、競合と処理順序、タイムアウト後の成否不明と部分障害、数値精度・丸め・通貨、締め・休場・タイムゾーン等の日付境界、内部不正と監査証跡、元帳・派生残高の照合と復旧を評価する。成果物には固定commit SHA、diff base、変更ファイル一覧と成果物hash、reviewer identity、作成者・Code Reviewerからの独立性宣言、各必須観点のPASS/FAIL/NAと根拠を含める。さらに作成者、Code Reviewer、Adversarial ReviewerそれぞれのAgentRun IDと実行基盤発行`context_id`を記録し、三者がすべて異なることを証明する。レビュー後に対象が変わった場合は対象を再固定して再レビューする。
 
-Adversarial Review結果または理由付き除外判定の未記録、Adversarial Reviewerによる除外承認なし、証跡不足、blocking指摘が1件以上のいずれかでは`CODE_REVIEW`をFAILとし、Completionへ進めない。Completion Auditorは除外を承認せず、PHASE-10で承認証跡の存在、承認者の独立性、固定対象との一致だけを再検証する。
+金融分類の場合は除外artifactが存在しても無効とし、Adversarial Review結果のblocking指摘ゼロを必須とする。除外は「非金融」かつ「軽微」の分類証跡をPHASE-9のAdversarial Reviewerが承認した場合だけ有効とする。必須成果物の未記録、除外の条件不足または未承認、証跡不足、blocking指摘が1件以上、三者のAgentRun ID/`context_id`の欠落・重複・不一致のいずれかでは`CODE_REVIEW`をFAILとし、Completionへ進めない。Completion Auditorは除外を承認せず、PHASE-10で承認証跡の存在、承認者の独立性、固定対象との一致だけを再検証する。
 
 ## 11.2 機械判定とLLM判定の分離
 

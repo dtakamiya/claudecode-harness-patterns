@@ -25,6 +25,8 @@
 
 顧客資産・取引・会計・規制遵守・金融意思決定に影響する金融ドメインロジックに触れる修正は、局所的でもDevelopment Harnessへ即時昇格し、独立したAdversarial Reviewerの審査を必須とします。非金融の軽微変更だけはDevelopment HarnessのAdversarial Reviewerが承認した理由付き除外判定を利用できます。
 
+金融分類後は判定ラベルを`financial_escalation_required`とし、進行中のローカル作業を直ちに停止して、未開始の後続工程へ進まず即昇格します。固定対象と一致するDevelopmentの`CODE_REVIEW`証跡が揃うまでReportしません。
+
 ## 実行フロー
 
 1. **Triage:** バグの再現条件、現在値、期待値、対象外を確定し、規約、類似実装、テスト、検証コマンド、featureブランチをread-onlyで確認する。
