@@ -25,14 +25,17 @@
 
 ## 実行フロー
 
-1. **Triage:** バグの再現条件、現在値、期待値、対象外を確定し、規約、類似実装、テスト、検証コマンド、featureブランチをread-onlyで確認する。
-2. **Reproduce:** 不具合を再現する回帰テストを先に追加し、期待した理由で失敗することを確認する（RED）。
-3. **Fix:** 根本原因だけを修正する最小差分を実装し、回帰テストを成功させる（GREEN）。必要な整理だけを行う。
-4. **Verify:** 回帰テスト、関連テスト、該当するtypecheck/lint/buildを実行し、コマンドと終了コードを記録する。UI変更は`preview_screenshot` / `preview_eval`で表示・操作・console errorを確認する。
-5. **2軸Review:** `code-reviewer`が正確性と回帰を、`security-reviewer`が脆弱性と権限拡大を独立に確認する。blocking指摘を修正して再検証する。
-6. **Report:** 根本原因、変更ファイル、RED/GREENを含む検証証跡、レビュー結果、残課題を最終回答にまとめる。
+1. **Triage:** バグの再現条件、現在値、期待値、対象外を確定し、規約、類似実装、テスト、検証コマンドをread-onlyで確認する。
+2. **Branch / Baseline:** main/master以外のfeatureブランチを用意し、変更前の関連検証と開始時SHAを記録する。
+3. **Reproduce:** 不具合を再現する回帰テストを先に追加し、期待した理由で失敗することを確認する（RED）。
+4. **Fix:** 根本原因だけを修正する最小差分を実装し、回帰テストを成功させる（GREEN）。必要な整理だけを行う。
+5. **Verify:** 回帰テスト、関連テスト、該当するtypecheck/lint/buildを実行し、コマンドと終了コードを記録する。UI変更は`preview_screenshot` / `preview_eval`で表示・操作・console errorを確認する。
+6. **2軸Review:** `code-reviewer`が正確性と回帰を、`security-reviewer`が脆弱性と権限拡大を独立に確認する。blocking指摘を修正して再検証する。
+7. **Report:** 根本原因、変更ファイル、RED/GREENを含む検証証跡、レビュー結果、残課題を最終回答にまとめる。
 
 PR作成を依頼された場合だけ、CodeRabbitのレビューコメントをすべて解消してから完了とします。PR作成が依頼されていない場合は、Reportによるhandoffで完了できます。
+
+修正文書を作る場合は原則`docs/features/<feature-id>/`へまとめます。3方式の選択は[共通適用ガイド](../README.md)を参照してください。
 
 ## 最小成果物
 
