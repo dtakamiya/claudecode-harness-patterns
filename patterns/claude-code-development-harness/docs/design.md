@@ -232,6 +232,126 @@ Evaluator
 | コードレビュー | 不要 | 不要 | Code Reviewer | Evaluator専用 |
 | 完了監査 | 不要 | 不要 | Completion Auditor | Evaluator専用 |
 
+### 3.4.1 実行メタモデル
+
+本節は工程、エージェント、Skillの共通構造と実行時の関係だけを定義する。工程一覧と終了条件は§5、エージェント一覧と責務は§8、実行状態の永続化形式は§10を正本とし、本節では重複して列挙しない。
+
+#### 定義モデル
+
+| モデル | 必須属性 | 内容 |
+|---|---|---|
+| `PhaseDefinition` | `id`, `name`, `inputs`, `outputs`, `entry_gate`, `exit_gate`, `allowed_agents` | 工程の静的定義。具体値は§5を参照する |
+| `AgentDefinition` | `id`, `layer`, `responsibilities`, `allowed_phases`, `allowed_skills`, `tools`, `access_policy`, `completion_condition` | エージェントの責務と実行境界。具体値は§8および§3.6を参照する |
+| `SkillDefinition` | `id`, `version`, `description`, `triggers`, `applicable_phases`, `allowed_agents`, `inputs`, `outputs`, `prerequisites`, `tools` | 再利用可能な手順の静的定義。本文は各`SKILL.md`を正本とする |
+
+静的定義の最小カタログは次のとおりとする。ここにないIDは未定義として扱い、追加時は本表と参照先を同時に更新する。
+
+| モデル | IDと正本 |
+|---|---|
+| `PhaseDefinition` | `PHASE-0`〜`PHASE-10`。名称、成果物、終了条件、Agent構成は§5の同番号Phaseを正本とする |
+| `AgentDefinition` | 後掲のAgentDefinition実値表に記載したID。責務と禁止事項は§8、権限の基準は§3.6を正本とする |
+| `SkillDefinition` | `tdd-development@1`（`applicable_phases`: `PHASE-6`, `PHASE-7`, `PHASE-8`、`allowed_agents`: `tdd-generator`, `integration-test-engineer`）。構成とロード規則は§3.7、工程手順は§6〜§7を正本とする。その他のSkillは各`SKILL.md`の追加だけでは登録されず、本表へのID追加を要する |
+
+`PhaseDefinition`の実値は次のとおりとする。`—`は入力または開始ゲートを必要としないことを表す。
+
+| id / name | inputs | outputs | entry_gate | exit_gate | allowed_agents |
+|---|---|---|---|---|---|
+| `PHASE-0` 初期化 | repository | baseline, commands, progress, handoff | — | `INITIALIZATION` | initializer, harness-reviewer |
+| `PHASE-1` 要件定義 | baseline, stakeholder-input | requirements, acceptance-criteria, open-items | `INITIALIZATION` | `REQUIREMENTS_DRAFT` | requirements-planner, requirements-analyst |
+| `PHASE-2` 要件レビュー | requirements | requirements-review | `REQUIREMENTS_DRAFT` | `REQUIREMENTS_REVIEW` | requirements-reviewer |
+| `PHASE-3` 基本設計 | approved-requirements | basic-design, ADR | `REQUIREMENTS_REVIEW` | `BASIC_DESIGN` | architecture-planner, architect, design-reviewer |
+| `PHASE-4` 詳細設計 | basic-design, ADR | detailed-design | `BASIC_DESIGN` | `DETAILED_DESIGN` | detailed-designer, design-reviewer |
+| `PHASE-5` 実装計画 | detailed-design | task-plans | `DETAILED_DESIGN` | `IMPLEMENTATION_PLAN` | implementation-planner, task-generator, plan-reviewer |
+| `PHASE-6` テスト設計 | task-plans, acceptance-criteria | unit-test-plan, integration-test-plan, test-data | `IMPLEMENTATION_PLAN` | `TEST_DESIGN` | tdd-generator, test-reviewer |
+| `PHASE-7` TDD実装 | task-plan, test-plan, context-manifest | unit-tests, production-code, agent-run | `TEST_DESIGN` | `UNIT_TEST_GREEN` | continuation, tdd-generator, implementation-evaluator |
+| `PHASE-8` Integration Test | production-code, integration-test-plan | integration-tests, test-evidence | `UNIT_TEST_GREEN` | `INTEGRATION_TEST` | integration-test-engineer, integration-test-reviewer |
+| `PHASE-9` コードレビュー | fixed-review-target, test-evidence | code-review | `INTEGRATION_TEST` | `CODE_REVIEW` | code-reviewer |
+| `PHASE-10` 完了監査 | all-artifacts, traceability, reviews | completion-audit, final-handoff | `CODE_REVIEW` | `COMPLETION` | completion-auditor |
+
+Agentの`tools`、`access_policy`、`completion_condition`は次の共通profileで解決する。
+
+| profile | tools | access_policy | completion_condition |
+|---|---|---|---|
+| `control` | Read, Search, state-runner | project read、`progress.yaml` single-writer | 状態・handoff・次actionを原子的に更新 |
+| `planner` | Read, Search, Write | inputs read、計画成果物のみwrite、Network原則なし | 入力・範囲・終了条件・禁止事項が定義済み |
+| `generator` | Read, Search, Write, Bash | manifestと§3.6の積集合 | 必須成果物・コマンド証跡・agent-runが揃う |
+| `evaluator` | Read, Search, Bash | 対象read、review/agent-runのみwrite、Networkなし | blocking分類とPASS/FAILが記録済み |
+
+| AgentDefinition id | layer | allowed_phases | allowed_skills | profile / 例外 |
+|---|---|---|---|---|
+| development-orchestrator | control | PHASE-0..10 | — | control |
+| initializer | generator | PHASE-0 | — | generator / production code write禁止 |
+| continuation | control | PHASE-7 | — | control / `progress.yaml`直接write禁止 |
+| requirements-planner | planner | PHASE-1 | — | planner |
+| requirements-analyst | generator | PHASE-1 | — | generator / docs/requirementsのみwrite |
+| requirements-reviewer | evaluator | PHASE-2 | — | evaluator |
+| architecture-planner | planner | PHASE-3 | — | planner |
+| architect | generator | PHASE-3 | — | generator / docs/design, docs/decisionsのみwrite |
+| design-reviewer | evaluator | PHASE-3, PHASE-4 | — | evaluator |
+| detailed-designer | generator | PHASE-4 | — | generator / docs/designのみwrite |
+| implementation-planner | planner | PHASE-5 | — | planner |
+| task-generator | generator | PHASE-5 | — | generator / docs/plansのみwrite |
+| plan-reviewer | evaluator | PHASE-5 | — | evaluator |
+| tdd-generator | generator | PHASE-6, PHASE-7 | tdd-development@1 | generator |
+| test-reviewer | evaluator | PHASE-6 | — | evaluator |
+| implementation-evaluator | evaluator | PHASE-7 | — | evaluator |
+| integration-test-engineer | generator | PHASE-8 | tdd-development@1 | generator / test codeのみwrite |
+| integration-test-reviewer | evaluator | PHASE-8 | — | evaluator |
+| code-reviewer | evaluator | PHASE-9 | — | evaluator |
+| completion-auditor | evaluator | PHASE-10 | — | evaluator |
+| harness-reviewer | evaluator | PHASE-0 | — | evaluator |
+
+`tdd-development@1`は次の実値を持つ。
+
+| 属性 | 値 |
+|---|---|
+| description | UT駆動TDDとIntegration Testを、検証証跡付きで実行する手順 |
+| triggers | test-plan作成、RED-GREEN-REFACTOR、Integration Test作成 |
+| applicable phase-agent pairs | `PHASE-6:tdd-generator`, `PHASE-7:tdd-generator`, `PHASE-8:integration-test-engineer` |
+| inputs | task-plan, acceptance-criteria, test-policy, context-manifest |
+| outputs | test-planまたはtest-code、test-evidence、agent-run |
+| prerequisites | 対象Phaseのentry gate PASS、context manifest検証済み、テストコマンド実測済み |
+| tools | Read, Search, Write, Bash（Agent・manifest・sandboxとの積集合に限定） |
+
+#### 関係と多重度
+
+```text
+PhaseDefinition 1 ── 0..* PhaseRun
+PhaseRun       1 ── 0..* AgentRun
+AgentDefinition 1 ── 0..* AgentRun
+AgentRun       1 ── 0..* SkillUse
+SkillDefinition 1 ── 0..* SkillUse
+PhaseRun       1 ── 0..* GateRun
+GateRun        1 ── 0..* Artifact
+GateRun        1 ── 0..* TestEvidence
+```
+
+`GateRun`は一つのゲート判定実行を表し、ArtifactまたはTestEvidenceを少なくとも一つ必要とする。`PhaseDefinition`と`AgentDefinition`、`AgentDefinition`と`SkillDefinition`は多対多であり、Phase側の`allowed_agents`とAgent側の`allowed_phases`、Agent側の`allowed_skills`とSkill側の`allowed_agents`が相互に許可した場合だけ有効とする。片側の記載欠落、不一致、未定義IDはfail-closedで拒否する。実行時の割当は`PhaseRun`、`AgentRun`、`SkillUse`として記録する。
+
+#### 実行状態と遷移
+
+| 実行モデル | 状態 | 許可する主な遷移 |
+|---|---|---|
+| `PhaseRun` | `pending`, `ready`, `in_progress`, `blocked`, `review`, `passed`, `failed` | `pending → ready → in_progress → review → passed/failed`、未解決事項は`in_progress/review → blocked`、blocking解消時は`blocked → in_progress/review` |
+| `AgentRun` | `queued`, `running`, `awaiting_review`, `passed`, `failed`, `aborted` | `queued → running → awaiting_review → passed/failed`、中止時は`queued/running → aborted` |
+| `SkillUse` | `eligible`, `selected`, `loaded`, `running`, `completed`, `failed` | `eligible → selected → loaded → running → completed/failed` |
+
+`PhaseRun`の`passed/failed`、`AgentRun`の`passed/failed/aborted`、`SkillUse`の`completed/failed`を終端状態とする。回復可能なblockingは`failed`ではなく`blocked`とし、`failed`は同じrunで回復できない場合だけ使用する。終端状態からの再試行では既存runを遷移・上書きせず、終端runを`parent_run_id`で参照する新しい`PhaseRun`、`AgentRun`または`SkillUse`を作成する。永続化するフィールドと楽観ロックは§10に従う。
+
+`blocked → in_progress/review`は、全blocking issueの解消証跡をOrchestratorが検証した場合だけ許可し、遷移の実行者もOrchestratorに限定する。
+
+`pending → ready → in_progress`は、対象PhaseDefinitionの`entry_gate`がPASSであることをOrchestratorが検証した場合だけ許可する。`entry_gate`が`—`のPhaseはこの検証を不要とする。
+
+#### 実行規則
+
+1. Development Orchestratorは§5の現在工程とタスクから、`allowed_agents`を満たすAgentを選択する。
+2. AgentとSkillは前述の双方向許可を満たした候補だけを選ぶ。Skillはさらに`triggers`、`applicable_phases`、`prerequisites`をすべて満たす場合に選択し、選択後に`SKILL.md`、必要な参照資料の順で読み込む。
+3. 実効権限と利用可能toolsは、Agent定義、Skill定義、context manifest、実行環境のpermissions／sandboxの全制約の積集合とする。未指定または競合時はfail-closedとし、Skillによって権限を拡張しない。
+4. 一つの`AgentRun`は一つの工程・タスクを対象とし、使用Skill、入力revision、成果物、コマンド証跡、結果を§10のagent-run成果物へ記録する。証跡へsecretの値を保存してはならず、コマンド引数・標準出力・標準エラー・成果物パスを保存前にredactionする。secret検出時はrunを`failed`にし、安全な証跡へ置換するまでゲート判定に利用しない。
+5. GeneratorとEvaluatorは別の`AgentRun`とし、Evaluatorは作成対象を直接修正しない。回復可能なゲート不合格時は現在の`PhaseRun`を`blocked`として同じrunをGeneratorへ差し戻す。非回復の不合格時だけ`failed`とし、再試行する場合は失敗runを`parent_run_id`で参照する新規runを作成する。
+6. `progress.yaml`と集約された`PhaseRun`状態の更新者はDevelopment Orchestratorだけとする。AgentとSkillは更新を要求できるが、直接更新しない。
+7. `exit_gate`がPASSし、blocking issueがなく、必須成果物と証跡が揃った場合だけ次の工程を`ready`へ遷移させる。
+
 ## 3.5 Deterministic Guardrailアーキテクチャ
 
 必ず実行すべき処理を、LLMの自主判断に任せない。ガードレールは、予防・検知・復旧の3段階に分離する。
@@ -888,7 +1008,11 @@ updated_at: 2026-07-14T22:00:00+09:00
 updated_by: development-orchestrator
 project: order-service
 session_mode: continuation
-current_phase: tdd_implementation
+current_phase: integration_test
+current_phase_id: PHASE-8
+current_phase_status: ready
+current_phase_run_ref: docs/status/phase-runs/phase-run-TASK-004-008.yaml
+last_completed_phase_run_ref: docs/status/phase-runs/phase-run-TASK-004-007.yaml
 current_task: TASK-004
 context_manifest: docs/context/manifests/TASK-004.context.yaml
 worktree: .worktrees/TASK-004
@@ -903,7 +1027,7 @@ gates:
   implementation_plan: passed
   test_design: passed
   unit_test_red: passed
-  unit_test_green: in_progress
+  unit_test_green: passed
   review_target_fixed: pending
   integration_test: pending
   implementation_evaluation: pending
@@ -917,26 +1041,84 @@ latest_agent_runs:
   tdd_generator: docs/status/agent-runs/TASK-004/run-20260714T215500.yaml
 
 next_action:
-  agent: tdd-generator
+  agent: integration-test-engineer
   task: TASK-004
-  instruction: RED-GREEN-REFACTORを実行し、チェックポイントcommitとagent-run結果を作成する
+  instruction: PHASE-7の完了証跡を入力としてPHASE-8のIntegration Testを開始する
 ```
 
 ## 10.1 Agent-run成果物
 
+`PhaseRun`は`docs/status/phase-runs/<phase-run-id>.yaml`、`GateRun`は`docs/status/gate-runs/<gate-run-id>.yaml`へ保存し、`progress.yaml.current_phase_run_ref`から現在のPhaseRunを参照する。
+
+Orchestratorは`current_phase_run_ref`と`last_completed_phase_run_ref`について、canonical pathが`docs/status/phase-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<phase-run-id>`が内部の`phase_run_id`と一致することを検証する。current参照は内部の`phase_definition`、task、input revision、commit SHA、statusがそれぞれ`progress.yaml`の`current_phase_id`、`current_task`、`revision`、`current_commit`、`current_phase_status`と一致しなければならない。`current_phase`は表示名として扱う。last-completed参照は同一taskの直前Phaseで、statusが`passed`、exit gateがPASSであり、current runの`parent_run_id`で参照されるか、input revisionとcommit SHAの連鎖がcurrent runへ一致しなければならない。
+
+PhaseRunの`gate_run_refs`にはGateRun IDではなく、リポジトリルートからのcanonical pathを列挙する。Orchestratorは各参照について、パスが`docs/status/gate-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<gate-run-id>`が内部の`gate_run_id`と一致すること、内部の`phase_run_id`が参照元PhaseRunと一致することを検証する。さらに参照先のAgentRun、Artifact、TestEvidenceについてtask、input revision、commit SHAがPhaseRunと一致することを全件検証する。PhaseRunまたはGateRunの参照が一件でも欠落、不一致、解決不能、非一意であればfail-closedで更新を拒否し、各参照を一意に復元できる場合に限り受理する。次の最小schemaで永続化する。
+
+```yaml
+# docs/status/phase-runs/phase-run-TASK-004-008.yaml
+phase_run:
+  phase_run_id: phase-run-TASK-004-008
+  parent_run_id: null
+  phase_definition: PHASE-8
+  task: TASK-004
+  input_revision: 42
+  source_commit: abc123def456
+  status: ready
+  started_at: null
+  finished_at: null
+  agent_run_refs: []
+  gate_run_refs: []
+```
+
+次のGateRunは`last_completed_phase_run_ref`が指すPHASE-7の完了証跡であり、PHASE-8 ready runの子ではない。
+
+```yaml
+# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml
+gate_run_id: gate-run-TASK-004-unit-test-green-007
+parent_run_id: null
+gate_definition: UNIT_TEST_GREEN
+phase_run_id: phase-run-TASK-004-007
+task: TASK-004
+input_revision: 41
+source_commit: 789xyz000111
+status: passed
+started_at: 2026-07-14T21:59:31+09:00
+finished_at: 2026-07-14T22:00:00+09:00
+artifact_refs:
+  - docs/status/changes/TASK-004.yaml
+test_evidence_refs:
+  - docs/status/agent-runs/TASK-004/run-20260714T215500.stdout.redacted.log
+```
+
 ```yaml
 schema_version: 1
 run_id: run-20260714T215500
+parent_run_id: null
+phase_run_id: phase-run-TASK-004-007
 agent: tdd-generator
 task: TASK-004
+status: passed
+started_at: 2026-07-14T21:55:00+09:00
+finished_at: 2026-07-14T22:00:00+09:00
 input_revision: 41
 context_manifest: docs/context/manifests/TASK-004.context.yaml
 source_commit: 789xyz000111
 result_commit: abc123def456
 changed_files_manifest: docs/status/changes/TASK-004.yaml
+skill_uses:
+  - skill_use_id: skill-use-TASK-004-007-01
+    parent_run_id: null
+    skill: tdd-development@1
+    status: completed
+    started_at: 2026-07-14T21:55:00+09:00
+    finished_at: 2026-07-14T21:59:30+09:00
 commands:
   - command: ./gradlew test --tests OrderServiceTest
     exit_code: 0
+    stdout: docs/status/agent-runs/TASK-004/run-20260714T215500.stdout.redacted.log
+    stderr: docs/status/agent-runs/TASK-004/run-20260714T215500.stderr.redacted.log
+evidence_redacted: true
+secret_detected: false
 result: PASS
 requested_gate_transition:
   gate: unit_test_green
