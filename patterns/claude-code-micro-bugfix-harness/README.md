@@ -23,6 +23,8 @@
 
 小規模機能相当なら[Lightweight Feature Harness](../claude-code-lightweight-feature-harness/README.md)、原因調査や広い変更が必要なら[Development Harness](../claude-code-development-harness/README.md)へ昇格します。
 
+顧客資産・取引・会計・規制遵守・金融意思決定に影響する金融ドメインロジックに触れる修正は、局所的でもDevelopment Harnessへ即時昇格し、独立したAdversarial Reviewerの審査を必須とします。非金融の軽微変更だけはDevelopment HarnessのAdversarial Reviewerが承認した理由付き除外判定を利用できます。
+
 ## 実行フロー
 
 1. **Triage:** バグの再現条件、現在値、期待値、対象外を確定し、規約、類似実装、テスト、検証コマンド、featureブランチをread-onlyで確認する。
