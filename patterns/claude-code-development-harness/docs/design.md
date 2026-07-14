@@ -321,7 +321,7 @@ PhaseRun       1 ── 0..* AgentRun
 AgentDefinition 1 ── 0..* AgentRun
 AgentRun       1 ── 0..* SkillUse
 SkillDefinition 1 ── 0..* SkillUse
-PhaseRun       1 ── 1..* GateRun
+PhaseRun       1 ── 0..* GateRun
 GateRun        1 ── 0..* Artifact
 GateRun        1 ── 0..* TestEvidence
 ```
@@ -336,9 +336,11 @@ GateRun        1 ── 0..* TestEvidence
 | `AgentRun` | `queued`, `running`, `awaiting_review`, `passed`, `failed`, `aborted` | `queued → running → awaiting_review → passed/failed`、中止時は`queued/running → aborted` |
 | `SkillUse` | `eligible`, `selected`, `loaded`, `running`, `completed`, `failed` | `eligible → selected → loaded → running → completed/failed` |
 
-`PhaseRun`の`passed/failed`、`AgentRun`の`passed/failed/aborted`、`SkillUse`の`completed/failed`を終端状態とする。差し戻しや再試行では既存runを遷移・上書きせず、失敗runを`parent_run_id`で参照する新しい`PhaseRun`、`AgentRun`または`SkillUse`を作成する。永続化するフィールドと楽観ロックは§10に従う。
+`PhaseRun`の`passed/failed`、`AgentRun`の`passed/failed/aborted`、`SkillUse`の`completed/failed`を終端状態とする。回復可能なblockingは`failed`ではなく`blocked`とし、`failed`は同じrunで回復できない場合だけ使用する。終端状態からの再試行では既存runを遷移・上書きせず、終端runを`parent_run_id`で参照する新しい`PhaseRun`、`AgentRun`または`SkillUse`を作成する。永続化するフィールドと楽観ロックは§10に従う。
 
 `blocked → in_progress/review`は、全blocking issueの解消証跡をOrchestratorが検証した場合だけ許可し、遷移の実行者もOrchestratorに限定する。
+
+`pending → ready → in_progress`は、対象PhaseDefinitionの`entry_gate`がPASSであることをOrchestratorが検証した場合だけ許可する。`entry_gate`が`—`のPhaseはこの検証を不要とする。
 
 #### 実行規則
 
@@ -346,7 +348,7 @@ GateRun        1 ── 0..* TestEvidence
 2. AgentとSkillは前述の双方向許可を満たした候補だけを選ぶ。Skillはさらに`triggers`、`applicable_phases`、`prerequisites`をすべて満たす場合に選択し、選択後に`SKILL.md`、必要な参照資料の順で読み込む。
 3. 実効権限と利用可能toolsは、Agent定義、Skill定義、context manifest、実行環境のpermissions／sandboxの全制約の積集合とする。未指定または競合時はfail-closedとし、Skillによって権限を拡張しない。
 4. 一つの`AgentRun`は一つの工程・タスクを対象とし、使用Skill、入力revision、成果物、コマンド証跡、結果を§10のagent-run成果物へ記録する。証跡へsecretの値を保存してはならず、コマンド引数・標準出力・標準エラー・成果物パスを保存前にredactionする。secret検出時はrunを`failed`にし、安全な証跡へ置換するまでゲート判定に利用しない。
-5. GeneratorとEvaluatorは別の`AgentRun`とし、Evaluatorは作成対象を直接修正しない。ゲート不合格時は現在の`PhaseRun`を終端状態`failed`とし、指摘と失敗runへの親参照を持つ新規runを同じ工程のGeneratorへ差し戻す。
+5. GeneratorとEvaluatorは別の`AgentRun`とし、Evaluatorは作成対象を直接修正しない。回復可能なゲート不合格時は現在の`PhaseRun`を`blocked`として同じrunをGeneratorへ差し戻す。非回復の不合格時だけ`failed`とし、再試行する場合は失敗runを`parent_run_id`で参照する新規runを作成する。
 6. `progress.yaml`と集約された`PhaseRun`状態の更新者はDevelopment Orchestratorだけとする。AgentとSkillは更新を要求できるが、直接更新しない。
 7. `exit_gate`がPASSし、blocking issueがなく、必須成果物と証跡が揃った場合だけ次の工程を`ready`へ遷移させる。
 
@@ -1006,8 +1008,11 @@ updated_at: 2026-07-14T22:00:00+09:00
 updated_by: development-orchestrator
 project: order-service
 session_mode: continuation
-current_phase: tdd_implementation
-current_phase_run_ref: docs/status/phase-runs/phase-run-TASK-004-007.yaml
+current_phase: integration_test
+current_phase_id: PHASE-8
+current_phase_status: ready
+current_phase_run_ref: docs/status/phase-runs/phase-run-TASK-004-008.yaml
+last_completed_phase_run_ref: docs/status/phase-runs/phase-run-TASK-004-007.yaml
 current_task: TASK-004
 context_manifest: docs/context/manifests/TASK-004.context.yaml
 worktree: .worktrees/TASK-004
@@ -1022,7 +1027,7 @@ gates:
   implementation_plan: passed
   test_design: passed
   unit_test_red: passed
-  unit_test_green: in_progress
+  unit_test_green: passed
   review_target_fixed: pending
   integration_test: pending
   implementation_evaluation: pending
@@ -1036,41 +1041,53 @@ latest_agent_runs:
   tdd_generator: docs/status/agent-runs/TASK-004/run-20260714T215500.yaml
 
 next_action:
-  agent: tdd-generator
+  agent: integration-test-engineer
   task: TASK-004
-  instruction: RED-GREEN-REFACTORを実行し、チェックポイントcommitとagent-run結果を作成する
+  instruction: PHASE-7の完了証跡を入力としてPHASE-8のIntegration Testを開始する
 ```
 
 ## 10.1 Agent-run成果物
 
-`PhaseRun`は`docs/status/phase-runs/<phase-run-id>.yaml`、`GateRun`は`docs/status/gate-runs/<gate-run-id>.yaml`へ保存し、`progress.yaml.current_phase_run_ref`から現在のPhaseRunを参照する。PhaseRunの`gate_run_refs`にはGateRun IDではなく保存パスを列挙し、その参照だけで全GateRunを一意に復元できなければ更新を拒否する。次の最小schemaで永続化する。
+`PhaseRun`は`docs/status/phase-runs/<phase-run-id>.yaml`、`GateRun`は`docs/status/gate-runs/<gate-run-id>.yaml`へ保存し、`progress.yaml.current_phase_run_ref`から現在のPhaseRunを参照する。
+
+Orchestratorは`current_phase_run_ref`と`last_completed_phase_run_ref`について、canonical pathが`docs/status/phase-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<phase-run-id>`が内部の`phase_run_id`と一致することを検証する。current参照は内部の`phase_definition`、task、input revision、commit SHA、statusがそれぞれ`progress.yaml`の`current_phase_id`、`current_task`、`revision`、`current_commit`、`current_phase_status`と一致しなければならない。`current_phase`は表示名として扱う。last-completed参照は同一taskの直前Phaseで、statusが`passed`、exit gateがPASSであり、current runの`parent_run_id`で参照されるか、input revisionとcommit SHAの連鎖がcurrent runへ一致しなければならない。
+
+PhaseRunの`gate_run_refs`にはGateRun IDではなく、リポジトリルートからのcanonical pathを列挙する。Orchestratorは各参照について、パスが`docs/status/gate-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<gate-run-id>`が内部の`gate_run_id`と一致すること、内部の`phase_run_id`が参照元PhaseRunと一致することを検証する。さらに参照先のAgentRun、Artifact、TestEvidenceについてtask、input revision、commit SHAがPhaseRunと一致することを全件検証する。PhaseRunまたはGateRunの参照が一件でも欠落、不一致、解決不能、非一意であればfail-closedで更新を拒否し、各参照を一意に復元できる場合に限り受理する。次の最小schemaで永続化する。
 
 ```yaml
+# docs/status/phase-runs/phase-run-TASK-004-008.yaml
 phase_run:
-  phase_run_id: phase-run-TASK-004-007
+  phase_run_id: phase-run-TASK-004-008
   parent_run_id: null
-  phase_definition: PHASE-7
+  phase_definition: PHASE-8
   task: TASK-004
-  status: passed
-  started_at: 2026-07-14T21:50:00+09:00
-  finished_at: 2026-07-14T22:00:00+09:00
-  agent_run_refs:
-    - docs/status/agent-runs/TASK-004/run-20260714T215500.yaml
-  gate_run_refs:
-    - docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml
+  input_revision: 42
+  source_commit: abc123def456
+  status: ready
+  started_at: null
+  finished_at: null
+  agent_run_refs: []
+  gate_run_refs: []
+```
 
-gate_runs:
-  - gate_run_id: gate-run-TASK-004-unit-test-green-007
-    parent_run_id: null
-    gate_definition: UNIT_TEST_GREEN
-    phase_run_id: phase-run-TASK-004-007
-    status: passed
-    started_at: 2026-07-14T21:59:31+09:00
-    finished_at: 2026-07-14T22:00:00+09:00
-    artifact_refs:
-      - docs/status/changes/TASK-004.yaml
-    test_evidence_refs:
-      - docs/status/agent-runs/TASK-004/run-20260714T215500.stdout.redacted.log
+次のGateRunは`last_completed_phase_run_ref`が指すPHASE-7の完了証跡であり、PHASE-8 ready runの子ではない。
+
+```yaml
+# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml
+gate_run_id: gate-run-TASK-004-unit-test-green-007
+parent_run_id: null
+gate_definition: UNIT_TEST_GREEN
+phase_run_id: phase-run-TASK-004-007
+task: TASK-004
+input_revision: 41
+source_commit: 789xyz000111
+status: passed
+started_at: 2026-07-14T21:59:31+09:00
+finished_at: 2026-07-14T22:00:00+09:00
+artifact_refs:
+  - docs/status/changes/TASK-004.yaml
+test_evidence_refs:
+  - docs/status/agent-runs/TASK-004/run-20260714T215500.stdout.redacted.log
 ```
 
 ```yaml
