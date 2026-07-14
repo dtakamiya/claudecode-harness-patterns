@@ -34,7 +34,7 @@ User
 | TDD | RED → GREEN → REFACTORを小さく反復 | 新規・関連テストが成功 |
 | Verify | test、typecheck/lint/build、UIを検証 | 必須コマンドが終了コード0 |
 | 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件 |
-| Handoff | 差分と証跡を最終回答へ記録 | 必須項目がすべて存在 |
+| Handoff | 差分と証跡を最終回答へ記録 | 必須項目が存在し、金融分類なし、または固定対象と一致するDevelopment `CODE_REVIEW`証跡あり |
 
 ### Intakeの最小形式
 
@@ -66,8 +66,13 @@ User
 - 既存テスト基盤がなく、その新設自体が独立した設計課題になる
 - 同じ原因に対する修正が2回連続で失敗した
 - レビュー修正後も同じblocking指摘が再発した
+- 顧客資産・取引・会計・規制遵守・金融意思決定に影響する金融ドメインロジック（残高、元帳、注文、約定、決済、送金、返金、金利、手数料、FX、監査、取引状態など）に触れる
 
 失敗時はエラーを抑制せず、根本原因、試行内容、残る不確実性を記録する。スコープ内の別原因ならMicro Planを一度だけ更新できる。
+
+金融ドメインロジックはファイル数や差分量にかかわらず即時昇格し、Code/Securityの2軸レビューだけで完了してはならない。Development Harnessで独立したAdversarial Reviewerを起動する。金融処理に触れない軽微変更だけはDevelopment HarnessのAdversarial Reviewerが承認した除外判定で除外できる。Lightweight側で自己除外してはならず、理由と承認をレビュー結果へ記録する。
+
+Intakeまたは以降の工程で金融分類となった時点で判定ラベルを`financial_escalation_required`とし、進行中のローカル作業を直ちに停止して、未開始の後続工程へ進まずDevelopment Harnessへ即時昇格する。このラベルは状態機械を追加するものではない。固定対象と一致するDevelopmentの`CODE_REVIEW`証跡（Adversarial Reviewのblocking指摘ゼロ）が記録されるまでHandoffをブロックする。非金融かつ軽微の場合だけ、DevelopmentのAdversarial Reviewerが承認した除外証跡により解除できる。
 
 ## 5. 権限とHooks
 

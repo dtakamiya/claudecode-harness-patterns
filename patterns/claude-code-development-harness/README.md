@@ -12,6 +12,7 @@
 4. Planner、Generator、Evaluatorを分離し、成果物作成と独立レビューを別Agentで行う。
 5. 複数Agentやworktreeで、single-writer状態管理と権限境界により競合や越権を抑える。
 6. Hooksを利用できない環境で、External Harness RunnerによるCompatibleモードを使用する。
+7. 金融ドメインロジックを変更し、独立したAdversarial Reviewerにより異常系・競合・部分障害・不正利用を検査する。
 
 ## 対象外
 
@@ -27,6 +28,9 @@
 - Context Builder、context manifest、progress、handoff
 - Deterministic Guardrail、permissions、sandbox、External Harness Runner
 - Progressive Disclosure Skills、Harness Evals
+- 金融処理向けAdversarial Reviewer（独立Evaluator、blocking指摘ゼロを完了条件とする）
+
+顧客資産・取引・会計・規制遵守・金融意思決定に影響する変更ではAdversarial Reviewを必須とします。金融処理に触れない軽微変更だけは、PHASE-9のAdversarial Reviewerが承認した理由付き除外判定で除外できます。Completion Auditorは承認せず、証跡を再検証します。
 
 ## 設計書
 
