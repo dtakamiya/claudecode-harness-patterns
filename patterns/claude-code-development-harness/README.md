@@ -4,6 +4,8 @@
 
 要件定義から実装完了までを、工程、専門エージェント、成果物ハンドオフ、決定論的品質ゲート、永続化された状態で制御する開発ハーネスパターンです。UT駆動TDDとIntegration Testを中心に、長時間・複数セッションでも再開可能な開発プロセスを構成します。
 
+![複数工程をオーケストレーター、品質ゲート、独立レビュー、状態管理で制御する開発ハーネスの概要](docs/images/overview.png)
+
 ## 向いているケース
 
 1. 新規開発を要件定義、設計、TDD実装、Integration Test、完了監査まで品質ゲート付きで進める。
@@ -34,9 +36,12 @@
 
 ## 最小導入手順
 
-1. 設計書のPhase 0に従い、リポジトリ構造と実行可能な検証コマンドを調査する。
-2. `CLAUDE.md`に常設ルールと参照先を定義する。
-3. `progress.yaml`、最初のhandoff、context manifestを作成する。
-4. 現在工程に必要なAgentとSkillだけを用意する。
-5. テスト、静的解析、権限境界、工程終了条件をRunnerまたはHooksで強制する。
-6. 小さなタスクで一巡させ、Harness Evalsで再開性とゲート動作を確認する。
+1. main/master以外のfeatureブランチを用意する。
+2. 既存の検証script、Hook、Runnerと推移的な呼出先をread-onlyで監査する。
+3. permissions、sandbox、Network既定deny、権限境界を設定する。
+4. 設計書のPhase 0に従って変更前baselineを採取する。
+5. `CLAUDE.md`、`progress.yaml`、最初のhandoff、context manifestを用意する。
+6. 現在工程に必要なAgentとSkillだけを用意し、品質ゲートをRunnerまたはHooksで強制する。
+7. 小さなタスクで一巡させ、Harness Evalsで再開性とゲート動作を確認する。
+
+機能固有の要件・設計・テスト・レビュー・handoffは、原則`docs/features/<feature-id>/`へまとめます。共有規約と横断ADRだけを機能外へ置きます。ハーネス選択は[共通適用ガイド](../README.md)を参照してください。

@@ -234,6 +234,9 @@ fi
 if ! grep -Fxq 'ui-verifier|PHASE-8|ui_verifier' "$AGENTS_FILE"; then
   fail 'UI_VERIFICATIONを実行する専用Agent/profileが定義されていない'
 fi
+if grep -Eq 'docs/(requirements|design|plans|tests|reviews|handoffs)/' "$DESIGN_FILE"; then
+  fail '機能固有成果物がdocs/features/<feature-id>/外の旧global pathを参照している'
+fi
 
 if [ "$ERRORS" -ne 0 ]; then
   printf '%s\n' "Document consistency validation failed with $ERRORS error(s)." >&2
