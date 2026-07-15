@@ -23,7 +23,7 @@
 - 認証、認可、秘密情報、暗号、その他のセキュリティ境界に変更が及ぶ
 - 4ファイル以上を目安とする広い変更、または複数セッションになる見込み
 
-小規模機能相当なら[Lightweight Feature Harness](../claude-code-lightweight-feature-harness/README.md)、原因調査や広い変更が必要なら[Development Harness](../claude-code-development-harness/README.md)へ昇格します。
+障害対応や本番操作は[Incident Response Harness](../claude-code-incident-response-harness/README.md)へ昇格します。平時の小規模機能相当なら[Lightweight Feature Harness](../claude-code-lightweight-feature-harness/README.md)、原因調査や広い変更が必要なら[Development Harness](../claude-code-development-harness/README.md)へ昇格します。
 
 ## 実行フロー
 

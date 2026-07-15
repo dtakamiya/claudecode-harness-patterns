@@ -1,0 +1,115 @@
+# timeline/evidence/action_*は追記専用。top-level snapshotは根拠となるtimeline entryを先に追記してからScribeが更新する。
+incident_id: INC-YYYYMMDD-001
+severity: SEV-2
+impact: "影響を受ける利用者・機能・地域と開始時刻"
+commander: "氏名または当番ID"
+current_status: declared
+next_check_at: "2026-01-01T00:05:00Z"
+handoff_to: null
+timeline:
+  - timestamp: "2026-01-01T00:00:00Z"
+    actor: "role/name"
+    role: scribe
+    session_id: claude-session-id
+    trace_id: null
+    span_id: null
+    kind: fact
+    target: "対象resource"
+    operation: "観測または判断"
+    result: "無害化した要約"
+    exit_code: 0
+    rationale: "観測した事実と判断根拠。秘密情報を含めない"
+hypotheses:
+  - id: HYP-001
+    statement: "検証可能な仮説"
+    status: open
+    rationale: "支持・反証する証拠参照"
+evidence:
+  - id: EVD-001
+    timestamp: "2026-01-01T00:00:00Z"
+    actor: "role/name"
+    role: investigator
+    session_id: claude-session-id
+    trace_id: null
+    span_id: null
+    source: "monitor/log/trace/change-history"
+    operation: "redacted read-only query"
+    target: "対象resource"
+    result: "無害化した要約または証拠への参照"
+    exit_code: 0
+    rationale: "この証拠を収集した理由"
+action_proposals:
+  - action_id: ACT-001
+    revision: 1
+    canonical_payload: '{"version":"incident-action/v1","action_id":"ACT-001","revision":1,"target":"対象resource","operation":"秘密値を除いた提案操作","parameters":{},"expected_result":"期待結果","stop_condition":"停止・エスカレーション条件","timeout_seconds":60,"rollback_operation":"秘密値を除いたrollback操作","rollback_parameters":{},"rollback_condition":"rollbackを開始する条件"}'
+    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    timestamp: "2026-01-01T00:01:00Z"
+    actor: "role/name"
+    role: investigator
+    session_id: claude-session-id
+    trace_id: null
+    span_id: null
+    target: "対象resource"
+    operation: "秘密値を除いた提案操作"
+    parameters: {}
+    expected_result: "期待結果"
+    stop_condition: "停止・エスカレーション条件"
+    timeout_seconds: 60
+    result: proposed
+    exit_code: 0
+    rationale: "採用理由"
+    rollback_operation: "秘密値を除いたrollback操作"
+    rollback_parameters: {}
+    rollback_condition: "rollbackを開始する条件"
+approvals:
+  - action_id: ACT-001
+    revision: 1
+    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    timestamp: "2026-01-01T00:02:00Z"
+    actor: "人間の承認者"
+    role: approver
+    session_id: human-session-id
+    trace_id: null
+    span_id: null
+    target: "対象resource"
+    operation: "提案ACT-001 revision 1の承認"
+    result: approved
+    exit_code: 0
+    rationale: "承認理由と承認範囲"
+    expires_at: "2026-01-01T00:12:00Z"
+executions:
+  - action_id: ACT-001
+    revision: 1
+    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    timestamp: "2026-01-01T00:03:00Z"
+    actor: "実行担当"
+    role: executor
+    session_id: claude-session-id
+    trace_id: null
+    span_id: null
+    target: "対象resource"
+    operation: "秘密値を除いた提案操作"
+    parameters: {}
+    result: "実行結果"
+    exit_code: 0
+    rationale: "承認参照と実行判断"
+rollbacks:
+  - action_id: ACT-001
+    revision: 1
+    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    timestamp: null
+    actor: null
+    role: executor
+    session_id: null
+    trace_id: null
+    span_id: null
+    target: "対象resource"
+    operation: "秘密値を除いたrollback操作"
+    parameters: {}
+    result: not_executed
+    exit_code: null
+    rationale: "実行または未実行の理由"
+unresolved_items:
+  - item: "未解決事項"
+    owner: "担当者"
+    due_at: "2026-01-01T01:00:00Z"

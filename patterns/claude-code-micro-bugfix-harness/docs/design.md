@@ -59,6 +59,7 @@ main/master上では書き換えない。既存作業を保護し、ブランチ
 - REFACTORは現在の修正に必要な重複除去や命名改善だけにする。
 - REFACTOR後に回帰・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。
 - `PREPARATORY_REFACTOR`が必要なら実装せず、Development Harnessの別taskへ昇格する。
+- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。
 - 根本原因を説明できない場合、既存挙動を固定するテストしか書けない場合、テストが最初から成功する場合はFixへ進まない。
 - テスト削除、assertionの弱体化、例外握りつぶし、型・lint抑制を禁止する。
 

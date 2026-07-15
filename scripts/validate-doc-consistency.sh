@@ -6,6 +6,11 @@ ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 DESIGN_FILE="$ROOT_DIR/patterns/claude-code-development-harness/docs/design.md"
 LIGHTWEIGHT_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/docs/design.md"
 MICRO_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/docs/design.md"
+INCIDENT_README_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/README.md"
+INCIDENT_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/docs/design.md"
+INCIDENT_STATE_TEMPLATE_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/templates/incident-state.yaml"
+ROOT_README_FILE="$ROOT_DIR/README.md"
+PATTERNS_README_FILE="$ROOT_DIR/patterns/README.md"
 ERRORS=0
 
 fail() {
@@ -63,9 +68,16 @@ assert_order_in_file() {
   fi
 }
 
-for design_path in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+for design_path in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE" "$INCIDENT_DESIGN_FILE"; do
   if [ ! -f "$design_path" ] || [ ! -r "$design_path" ] || [ -L "$design_path" ]; then
     printf '%s\n' "FAIL: 設計書が通常の読取り可能ファイルではない: $design_path" >&2
+    exit 1
+  fi
+done
+
+for required_path in "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE"; do
+  if [ ! -f "$required_path" ] || [ ! -r "$required_path" ] || [ -L "$required_path" ]; then
+    printf '%s\n' "FAIL: 必須文書が通常の読取り可能ファイルではない: $required_path" >&2
     exit 1
   fi
 done
@@ -91,6 +103,93 @@ assert_unique_line '# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-00
 assert_unique_line '# docs/features/order/reviews/targets/TASK-004-implementation.yaml' "$DESIGN_FILE" 'IMPLEMENTATION_REVIEW_TARGET schema例が一意でない'
 assert_unique_line '### TDDと検証証跡' "$LIGHTWEIGHT_DESIGN_FILE" 'Lightweight TDD節が一意でない'
 assert_unique_line '## 4. TDDと最小修正' "$MICRO_DESIGN_FILE" 'Micro TDD節が一意でない'
+assert_unique_line '## 1. 適用範囲' "$INCIDENT_DESIGN_FILE" 'Incident適用範囲節が一意でない'
+assert_unique_line '## 2. 役割とsingle-writer' "$INCIDENT_DESIGN_FILE" 'Incident役割節が一意でない'
+assert_unique_line '## 3. 対応フロー' "$INCIDENT_DESIGN_FILE" 'Incident対応フロー節が一意でない'
+assert_unique_line '## 4. 本番操作ガードレール' "$INCIDENT_DESIGN_FILE" 'Incidentガードレール節が一意でない'
+assert_unique_line '## 5. 再試行ポリシー' "$INCIDENT_DESIGN_FILE" 'Incident再試行節が一意でない'
+assert_unique_line '## 6. 記録・監査・秘密情報' "$INCIDENT_DESIGN_FILE" 'Incident監査節が一意でない'
+assert_unique_line '## 7. 状態ファイル' "$INCIDENT_DESIGN_FILE" 'Incident状態節が一意でない'
+assert_unique_line '## 8. Handoffと事後分析' "$INCIDENT_DESIGN_FILE" 'Incident handoff節が一意でない'
+
+assert_line '- [Claude Code Incident Response Harness](patterns/claude-code-incident-response-harness/README.md) — 本番サービス障害を、明示承認、single-writer、構造化記録、復旧検証で安全に収束させるパターン' "$ROOT_README_FILE" 'ルート索引にIncident Harnessがない'
+assert_line '| 主用途 | 原因が特定できる局所バグ | 受入条件が確定した小機能 | 要件・設計を含む開発 | 本番サービス障害の収束 |' "$PATTERNS_README_FILE" '比較表にIncident Harnessの主用途がない'
+assert_line '- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightからIncidentへの昇格案内がない'
+assert_line '- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。' "$MICRO_DESIGN_FILE" 'MicroからIncidentへの昇格案内がない'
+
+for incident_state_key in incident_id severity impact commander current_status timeline hypotheses evidence action_proposals approvals executions rollbacks next_check_at unresolved_items handoff_to; do
+  assert_key_once "$incident_state_key" "$INCIDENT_STATE_TEMPLATE_FILE" "Incident状態雛形のkey '$incident_state_key' が一意でない"
+done
+
+if ! command -v ruby >/dev/null 2>&1; then
+  fail 'Incident状態雛形の構文・階層検査にはRuby標準ライブラリyamlが必要'
+elif ! ruby -ryaml -rjson -rdigest -e '
+  data = YAML.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], aliases: false)
+  arrays = %w[timeline evidence action_proposals approvals executions rollbacks]
+  common = %w[timestamp actor role session_id trace_id span_id target operation result exit_code rationale]
+  arrays.each do |name|
+    value = data[name]
+    raise "#{name} must be a non-empty array" unless value.is_a?(Array) && !value.empty?
+    value.each do |entry|
+      missing = common.reject { |key| entry.key?(key) }
+      raise "#{name} entry missing #{missing.join(",")}" unless missing.empty?
+      timestamp = entry["timestamp"]
+      raise "#{name} timestamp must be RFC3339 UTC or null" unless timestamp.nil? || timestamp.match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
+    end
+  end
+  %w[action_proposals approvals executions rollbacks].each do |name|
+    data[name].each do |entry|
+      %w[action_id revision digest].each { |key| raise "#{name} entry missing #{key}" unless entry.key?(key) }
+      raise "#{name} digest invalid" unless entry["digest"].match?(/\Asha256:[0-9a-f]{64}\z/)
+    end
+  end
+  proposals = data["action_proposals"].each_with_object({}) do |entry, index|
+    key = [entry["action_id"], entry["revision"]]
+    raise "duplicate proposal revision" if index.key?(key)
+    canonical = JSON.generate({
+      "version" => "incident-action/v1",
+      "action_id" => entry["action_id"],
+      "revision" => entry["revision"],
+      "target" => entry["target"],
+      "operation" => entry["operation"],
+      "parameters" => entry["parameters"],
+      "expected_result" => entry["expected_result"],
+      "stop_condition" => entry["stop_condition"],
+      "timeout_seconds" => entry["timeout_seconds"],
+      "rollback_operation" => entry["rollback_operation"],
+      "rollback_parameters" => entry["rollback_parameters"],
+      "rollback_condition" => entry["rollback_condition"]
+    })
+    raise "proposal canonical_payload mismatch" unless entry["canonical_payload"] == canonical
+    calculated = "sha256:#{Digest::SHA256.hexdigest(canonical.encode("UTF-8"))}"
+    raise "proposal digest mismatch" unless entry["digest"] == calculated
+    index[key] = entry["digest"]
+  end
+  %w[approvals executions rollbacks].each do |name|
+    data[name].each do |entry|
+      key = [entry["action_id"], entry["revision"]]
+      raise "#{name} has no matching proposal" unless proposals[key]
+      raise "#{name} digest does not bind proposal" unless proposals[key] == entry["digest"]
+    end
+  end
+  proposal_entries = data["action_proposals"].each_with_object({}) { |entry, index| index[[entry["action_id"], entry["revision"]]] = entry }
+  data["executions"].each do |entry|
+    proposal = proposal_entries[[entry["action_id"], entry["revision"]]]
+    %w[target operation parameters].each do |field|
+      raise "execution #{field} differs from approved proposal" unless entry[field] == proposal[field]
+    end
+  end
+  data["rollbacks"].each do |entry|
+    proposal = proposal_entries[[entry["action_id"], entry["revision"]]]
+    raise "rollback target differs from approved proposal" unless entry["target"] == proposal["target"]
+    raise "rollback operation differs from approved proposal" unless entry["operation"] == proposal["rollback_operation"]
+    raise "rollback parameters differ from approved proposal" unless entry["parameters"] == proposal["rollback_parameters"]
+  end
+' "$INCIDENT_STATE_TEMPLATE_FILE"; then
+  fail 'Incident状態雛形のYAML構文、必須階層、entry項目、UTC時刻またはdigestが不正'
+fi
+
+assert_line '進行中の本番障害または緊急の本番操作が必要になった場合は、開発工程を停止し、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。復旧後の恒久修正は新しいDevelopment taskとして再開する。' "$DESIGN_FILE" 'Development設計書にIncidentへの昇格導線がない'
 
 if [ "$(grep -Fxc -- '# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml' "$DESIGN_FILE")" -eq 1 ]; then
   awk '
