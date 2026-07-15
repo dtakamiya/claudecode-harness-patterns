@@ -4,6 +4,8 @@ set -u
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 DESIGN_FILE="$ROOT_DIR/patterns/claude-code-development-harness/docs/design.md"
+JIRA_README_FILE="$ROOT_DIR/patterns/claude-code-jira-ticket-harness/README.md"
+JIRA_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-jira-ticket-harness/docs/design.md"
 LIGHTWEIGHT_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/docs/design.md"
 MICRO_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/docs/design.md"
 INCIDENT_README_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/README.md"
@@ -54,6 +56,15 @@ assert_key_once() {
   fi
 }
 
+assert_contains() {
+  expected=$1
+  file=$2
+  message=$3
+  if ! grep -Fq -- "$expected" "$file"; then
+    fail "$message"
+  fi
+}
+
 assert_order_in_file() {
   file=$1
   first=$2
@@ -68,14 +79,14 @@ assert_order_in_file() {
   fi
 }
 
-for design_path in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE" "$INCIDENT_DESIGN_FILE"; do
+for design_path in "$DESIGN_FILE" "$JIRA_DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE" "$INCIDENT_DESIGN_FILE"; do
   if [ ! -f "$design_path" ] || [ ! -r "$design_path" ] || [ -L "$design_path" ]; then
     printf '%s\n' "FAIL: 設計書が通常の読取り可能ファイルではない: $design_path" >&2
     exit 1
   fi
 done
 
-for required_path in "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE"; do
+for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE"; do
   if [ ! -f "$required_path" ] || [ ! -r "$required_path" ] || [ -L "$required_path" ]; then
     printf '%s\n' "FAIL: 必須文書が通常の読取り可能ファイルではない: $required_path" >&2
     exit 1
@@ -94,6 +105,8 @@ DIRECTORY_AGENTS_FILE="$WORK_DIR/directory-agents"
 UNIT_TEST_GREEN_GATE_FILE="$WORK_DIR/unit-test-green-gate"
 IMPLEMENTATION_GATE_SECTION_FILE="$WORK_DIR/implementation-gate-section"
 IMPLEMENTATION_REVIEW_TARGET_FILE="$WORK_DIR/implementation-review-target"
+JIRA_DEVELOPMENT_OUTBOX_FILE="$WORK_DIR/jira-development-outbox.yaml"
+JIRA_INCIDENT_OUTBOX_FILE="$WORK_DIR/jira-incident-outbox.yaml"
 
 assert_unique_line '## 6.5 REFACTOR Gate' "$DESIGN_FILE" 'Development REFACTOR節が一意でない'
 assert_unique_line '## 6.1 標準サイクル' "$DESIGN_FILE" 'Development標準サイクル節が一意でない'
@@ -111,7 +124,17 @@ assert_unique_line '## 5. 再試行ポリシー' "$INCIDENT_DESIGN_FILE" 'Incide
 assert_unique_line '## 6. 記録・監査・秘密情報' "$INCIDENT_DESIGN_FILE" 'Incident監査節が一意でない'
 assert_unique_line '## 7. 状態ファイル' "$INCIDENT_DESIGN_FILE" 'Incident状態節が一意でない'
 assert_unique_line '## 8. Handoffと事後分析' "$INCIDENT_DESIGN_FILE" 'Incident handoff節が一意でない'
+assert_unique_line '## 3. Jira受付・同期エンベロープ' "$JIRA_DESIGN_FILE" 'Jira受付・同期節が一意でない'
+assert_unique_line '## 4. TicketSnapshotとDefinition of Ready' "$JIRA_DESIGN_FILE" 'Jira TicketSnapshot節が一意でない'
+assert_unique_line '## 5. Lease・revision・状態同期' "$JIRA_DESIGN_FILE" 'Jira排他・同期節が一意でない'
+assert_unique_line '## 6. ルーティング' "$JIRA_DESIGN_FILE" 'Jiraルーティング節が一意でない'
+assert_unique_line '## 7. Jira書戻し' "$JIRA_DESIGN_FILE" 'Jira書戻し節が一意でない'
+assert_unique_line '## 8. 権限・不信頼入力・秘密情報' "$JIRA_DESIGN_FILE" 'Jiraセキュリティ節が一意でない'
+assert_unique_line '## 9. 失敗処理と再開' "$JIRA_DESIGN_FILE" 'Jira失敗処理節が一意でない'
+assert_unique_line '### 4.2 Incident Readiness Gate' "$JIRA_DESIGN_FILE" 'Incident専用readiness gate節が一意でない'
 
+assert_line '- [Claude Code Jira Ticket Harness](patterns/claude-code-jira-ticket-harness/README.md) — Jiraチケットを安全に取り込み、適切な開発ハーネスへ振り分け、証跡をJiraへ冪等に書き戻すパターン' "$ROOT_README_FILE" 'ルート索引にJira Ticket Harnessがない'
+assert_line 'Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket Harness](claude-code-jira-ticket-harness/README.md)でチケットを正規化し、作業の規模とリスクに応じて既存の4方式へ振り分ける。' "$PATTERNS_README_FILE" '共通適用ガイドにJira Ticket Harnessの案内がない'
 assert_line '- [Claude Code Incident Response Harness](patterns/claude-code-incident-response-harness/README.md) — 本番サービス障害を、明示承認、single-writer、構造化記録、復旧検証で安全に収束させるパターン' "$ROOT_README_FILE" 'ルート索引にIncident Harnessがない'
 assert_line '| 主用途 | 原因が特定できる局所バグ | 受入条件が確定した小機能 | 要件・設計を含む開発 | 本番サービス障害の収束 |' "$PATTERNS_README_FILE" '比較表にIncident Harnessの主用途がない'
 assert_line '- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightからIncidentへの昇格案内がない'
@@ -190,6 +213,111 @@ elif ! ruby -ryaml -rjson -rdigest -e '
 fi
 
 assert_line '進行中の本番障害または緊急の本番操作が必要になった場合は、開発工程を停止し、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。復旧後の恒久修正は新しいDevelopment taskとして再開する。' "$DESIGN_FILE" 'Development設計書にIncidentへの昇格導線がない'
+
+for jira_term in TicketSnapshot 'Definition of Ready' lease revision stale outbox idempotency_key read_credential write_credential needs_clarification Micro Bugfix Lightweight Feature Development 'Incident Response'; do
+  assert_contains "$jira_term" "$JIRA_DESIGN_FILE" "Jira設計書に必須語 '$jira_term' がない"
+done
+assert_contains 'Jira本文、コメント、添付ファイルは不信頼入力として扱う。' "$JIRA_DESIGN_FILE" 'Jira入力の信頼境界が定義されていない'
+assert_contains '```mermaid' "$JIRA_DESIGN_FILE" 'Jira設計書にMermaid構成図がない'
+assert_contains 'Incident Readinessは標準Definition of Readyより前に評価する。' "$JIRA_DESIGN_FILE" 'Incident判定が標準DoRより前に定義されていない'
+for jira_safety_term in pre_writeback_revision post_writeback_revision '短期intake lease' depends_on 'outboxはAgentから書き込めない' 'Agentプロセス外' If-Match at-least-once 'Attachment Isolation Fetcher' 'private address' 'link-local' WORM 'hash chain'; do
+  assert_contains "$jira_safety_term" "$JIRA_DESIGN_FILE" "Jira設計書に安全要件 '$jira_safety_term' がない"
+done
+assert_contains 'commentとtransitionは別々のoutbox entryにする。' "$JIRA_DESIGN_FILE" 'Jira commentとtransitionが独立outboxになっていない'
+assert_contains 'development writebackでは、workerはrun、固定commit、review target、`DEVELOPMENT_COMPLETION`を独立に再検証する。' "$JIRA_DESIGN_FILE" '通常開発writeback workerの独立検証がない'
+assert_contains 'incident writebackでは、workerはrun、固定incident-state revisionとdigest、`INCIDENT_READINESS`、incident lease、`INCIDENT_COMPLETION`を独立に再検証する。' "$JIRA_DESIGN_FILE" 'Incident writeback workerの独立検証がない'
+assert_contains 'redirect先ごとにscheme、hostname、解決後IPを再検査する。' "$JIRA_DESIGN_FILE" 'Jira添付redirectの再検査がない'
+assert_contains 'ACL、retention、redaction' "$JIRA_DESIGN_FILE" 'Jira監査ログの保護・保存・秘匿要件がない'
+for jira_final_term in INCIDENT_READINESS ROUTE_READINESS 'incident lease' '選択routeのreadiness gate' 'pre_writeback_revisionと意味field digestがTicketSnapshotと一致' 'post_writeback_revisionがdelivery eventへ記録' '中央outbox store' 'outbox-refs/'; do
+  assert_contains "$jira_final_term" "$JIRA_DESIGN_FILE" "Jira設計書に最終整合性要件 '$jira_final_term' がない"
+done
+assert_contains 'Incident Readinessを標準Definition of Readyより先に判定する。' "$JIRA_README_FILE" 'Jira READMEでIncident判定が先行していない'
+assert_contains '選択候補ごとのreadinessを検査する。' "$JIRA_README_FILE" 'Jira READMEにroute別readinessがない'
+assert_contains 'routeに対応するleaseを取得する。' "$JIRA_README_FILE" 'Jira READMEにroute別leaseがない'
+assert_order_in_file "$JIRA_README_FILE" '2. Incident Readinessを標準Definition of Readyより先に判定する。' '3. 選択候補ごとのreadinessを検査する。' 'Jira READMEのIncident判定とroute別readinessの順序が不正'
+assert_order_in_file "$JIRA_README_FILE" '3. 選択候補ごとのreadinessを検査する。' '4. routeに対応するleaseを取得する。' 'Jira READMEのreadinessとleaseの順序が不正'
+assert_order_in_file "$JIRA_README_FILE" '4. routeに対応するleaseを取得する。' '5. 非Incidentチケットを、再現性、規模、リスクから既存の3方式へ振り分ける。' 'Jira READMEのleaseとrouteの順序が不正'
+if grep -Fq -- 'TicketSnapshotと完了時Jira revisionが一致する。' "$JIRA_DESIGN_FILE"; then
+  fail 'Jira DoDでwriteback後revisionとTicketSnapshotの一致を要求してはならない'
+fi
+if grep -Fq -- '├─ outbox/' "$JIRA_DESIGN_FILE"; then
+  fail 'Git管理下のdocs/statusへ中央outbox本体を配置してはならない'
+fi
+for jira_completion_term in INCIDENT_COMPLETION incident_state_revision incident_state_digest 'DEVELOPMENT_COMPLETIONはMicro Bugfix、Lightweight Feature、Developmentだけ' 'Incidentへbranch、commit、review target、PRを要求しない。' 'development writeback' 'incident writeback' '固定incident-state revisionとdigest'; do
+  assert_contains "$jira_completion_term" "$JIRA_DESIGN_FILE" "Jira設計書にroute別完了要件 '$jira_completion_term' がない"
+done
+assert_contains 'Incidentは影響回復、観測窓、handoff、恒久修正follow-upを完了条件とする。' "$JIRA_README_FILE" 'Jira READMEにIncident固有完了条件がない'
+if grep -Fq -- 'issue typeだけで方式を決めず、Definition of Ready後に次の優先順で判定する。' "$JIRA_DESIGN_FILE"; then
+  fail '標準DoR後にIncidentを含む4方式を判定する旧routingを残してはならない'
+fi
+if grep -Fq -- '既存の4方式へ振り分ける。' "$JIRA_README_FILE"; then
+  fail 'Jira READMEでIncidentを通常3方式と同じ後段routingへ含めてはならない'
+fi
+assert_contains 'route別固定証跡またはgateがschemaと一致しなければfail-closedで拒否する。' "$JIRA_DESIGN_FILE" 'Jira outboxのroute別fail-closed規則がない'
+for jira_route_comment_term in 'development結果commentはPR、verification、review' 'incident結果commentはimpact、recovery、mitigation、observation window、handoff、permanent fix follow-up' 'state runnerはACLで許可されたidentityとしてintent、route別固定証跡、gate結果を検証する。' 'route別固定証跡/gate不一致'; do
+  assert_contains "$jira_route_comment_term" "$JIRA_DESIGN_FILE" "Jira設計書にroute別comment/固定証跡要件 '$jira_route_comment_term' がない"
+done
+if grep -Fq -- '完了コメントには概要、PR' "$JIRA_DESIGN_FILE"; then
+  fail 'IncidentにもPRを要求する旧完了コメント文言を残してはならない'
+fi
+if grep -Fq -- '固定commit/gate不一致' "$JIRA_DESIGN_FILE"; then
+  fail 'Incidentにもfixed commitを要求するworker共通表現を残してはならない'
+fi
+
+for outbox_kind in development incident; do
+  output_file="$WORK_DIR/jira-$outbox_kind-outbox.yaml"
+  awk -v marker="# $outbox_kind writeback example" '
+    $0 == marker { in_block = 1 }
+    in_block && $0 == "```" { exit }
+    in_block { print }
+  ' "$JIRA_DESIGN_FILE" > "$output_file"
+done
+
+if ! command -v ruby >/dev/null 2>&1; then
+  fail 'Jira outbox schema検査にはRuby標準ライブラリyamlが必要'
+elif ! ruby -ryaml -e '
+  common = %w[schema_version outbox_id issue_id issue_key run_id snapshot_revision pre_writeback_revision post_writeback_revision route operation expected_status lease_ref depends_on idempotency_key payload_digest payload required_gates signature]
+  definitions = {
+    "development" => {
+      required: %w[fixed_commit review_target],
+      forbidden: %w[incident_state_ref incident_state_revision incident_state_digest],
+      gates: %w[ROUTE_READINESS LEASE DEVELOPMENT_COMPLETION JIRA_REVISION],
+      payload: %w[kind summary pull_request verification review],
+      forbidden_payload: %w[impact recovery mitigation observation_window handoff permanent_fix_follow_up]
+    },
+    "incident" => {
+      required: %w[incident_state_ref incident_state_revision incident_state_digest],
+      forbidden: %w[fixed_commit review_target],
+      gates: %w[INCIDENT_READINESS LEASE INCIDENT_COMPLETION JIRA_REVISION],
+      payload: %w[kind impact recovery mitigation observation_window handoff permanent_fix_follow_up],
+      forbidden_payload: %w[pull_request verification review]
+    }
+  }
+  ARGV.each_slice(2) do |kind, file|
+    data = YAML.safe_load(File.read(file), permitted_classes: [], aliases: false)
+    raise "#{kind} outbox must be a mapping" unless data.is_a?(Hash)
+    definition = definitions.fetch(kind)
+    missing = (common + definition[:required]).reject { |key| data.key?(key) }
+    raise "#{kind} outbox missing #{missing.join(",")}" unless missing.empty?
+    present_forbidden = definition[:forbidden].select { |key| data.key?(key) }
+    raise "#{kind} outbox forbids #{present_forbidden.join(",")}" unless present_forbidden.empty?
+    raise "#{kind} route mismatch" unless data["route"] == kind
+    gates = data["required_gates"]
+    raise "#{kind} gates mismatch" unless gates.is_a?(Array) && gates.sort == definition[:gates].sort
+    payload = data["payload"]
+    raise "#{kind} payload must be a mapping" unless payload.is_a?(Hash)
+    missing_payload = definition[:payload].reject { |key| payload.key?(key) }
+    raise "#{kind} payload missing #{missing_payload.join(",")}" unless missing_payload.empty?
+    forbidden_payload = definition[:forbidden_payload].select { |key| payload.key?(key) }
+    raise "#{kind} payload forbids #{forbidden_payload.join(",")}" unless forbidden_payload.empty?
+    raise "#{kind} payload kind mismatch" unless payload["kind"] == kind
+  end
+' development "$JIRA_DEVELOPMENT_OUTBOX_FILE" incident "$JIRA_INCIDENT_OUTBOX_FILE"; then
+  fail 'Jira Development/Incident outboxの共通envelopeまたはroute別oneOf schemaが不正'
+fi
+if [ -e "$ROOT_DIR/patterns/claude-code-jira-ticket-harness/docs/images/overview.png" ]; then
+  fail 'Jira Ticket Harnessは旧Development overview.pngを複製してはならない'
+fi
 
 if [ "$(grep -Fxc -- '# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml' "$DESIGN_FILE")" -eq 1 ]; then
   awk '
