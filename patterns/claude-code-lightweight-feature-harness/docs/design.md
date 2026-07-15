@@ -49,7 +49,7 @@ User
 
 不明点は推測せず、結果を変える選択肢を提示してユーザーへ確認する。
 
-main/master上ではファイルを書き換えない。既存作業を保護したうえでブランチ名候補を提示し、ユーザー承認後にfeatureブランチを作成する。既にfeatureブランチ上ならそのまま開始できる。
+main/master上ではファイルを書き換えない。既存作業を保護したうえで、事前許可された命名規則のfeatureブランチを作成する。既にfeatureブランチ上ならそのまま開始できる。個別承認が必要なリスク条件ではHuman Gateを先に通す。
 
 ### TDDと検証証跡
 
@@ -83,7 +83,7 @@ main/master上ではファイルを書き換えない。既存作業を保護し
 - permissionsはdeny優先とし、`.env*`、秘密鍵、credential、`.git`内部、本番操作を拒否する。
 - `.env*`、OS Keychain、cloud/CI credentialを読み取らず、秘密値をログ、差分、handoffへ出力しない。証跡はsecretをredactする。
 - 書込みは対象コンポーネント、テスト、必要な文書に限定する。Networkと外部サービス更新は既定で許可しない。
-- `git push`、PR作成、依存追加、migration実行など外部状態や影響範囲を変える操作は明示承認を要する。
+- `git push`、PR作成、依存追加、migration実行などはHuman Gate Policyで分類する。有効なpre-authorization grantに束縛されたprivate repositoryのfeature branchへのpushとdraft PRだけをTier 1として扱い、merge、public repository、外部公開、依存追加、migrationへ許可を継承しない。
 - Hooksは必須ではない。既存Hookがある場合だけ、保護ファイルの書込み防止、編集後format、終了時verifyなど決定論的な規則に利用する。初回実行前にHook本体と呼出先をread-onlyで確認し、外部通信、secret参照、危険コマンド、対象外への書込みがないことを確かめる。
 - Hookはユーザー権限で実行されるため、入力検証、変数のquote、絶対パス、secret除外を徹底する。Hook不在時は同じ検証コマンドを手動で実行する。
 - 検証scriptと推移的な呼出先も初回実行前にread-onlyで確認する。`rm`、`git reset --hard`、強制checkoutなど変更を失う操作は既定でdenyする。
@@ -123,6 +123,8 @@ UI変更では、通常のtest/typecheckに加えて利用可能なpreview/brows
 PR作成を依頼された場合だけ、CodeRabbitの全レビューコメントを解消し、影響する検証を再実行してから完了とする。
 
 ## 9. 公式情報との対応
+
+人間承認の共通基準は[Human Gate Policy](../../human-gate-policy.md)を正本とする。スコープ内の編集、feature branch、ローカルcommitを操作ごとに承認させず、protected branchへのmerge、外部公開、高リスク変更だけをリスク階層に従ってゲートする。本設計の昇格条件は追加条件として適用する。
 
 - [Building Effective AI Agents](https://www.anthropic.com/engineering/building-effective-agents): 複雑性は必要時のみ増やすため、単一オーケストレーターと短い固定フローを採用する。
 - [Claude Code best practices](https://code.claude.com/docs/en/best-practices): 探索、計画、実装、検証を分離し、明確な検証手段を与える。

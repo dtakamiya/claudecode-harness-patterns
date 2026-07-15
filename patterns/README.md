@@ -16,6 +16,8 @@
 
 Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket Harness](claude-code-jira-ticket-harness/README.md)でチケットを正規化し、作業の規模とリスクに応じて既存の4方式へ振り分ける。
 
+共通の人間承認ルールは[Human Gate Policy](human-gate-policy.md)を正本とする。
+
 ## 参考資料
 
 - [Claude CodeのモデルとEffortの選び方](assets/claude-code-model-effort-selection-guide.png)

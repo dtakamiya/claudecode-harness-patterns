@@ -12,13 +12,14 @@
 |---|---|---|
 | Incident Commander | severity、優先順位、停止・継続、対外連絡を決定 | 承認のみ |
 | Investigator | read-onlyで証拠収集、仮説と選択肢を提示 | なし |
-| Approver | 影響、検証、rollbackを確認して操作単位で承認 | 承認のみ |
+| Approvers | 業務・運用と技術・セキュリティの観点から、影響、検証、rollbackを操作単位で承認 | 承認のみ |
 | Executor | 承認済み操作を一つずつ実行し結果を記録 | 実行中の一名だけ |
 | Scribe | timeline、証拠、判断、handoffを更新 | 状態記録のみ |
 
 - 本番変更のsingle-writerは、同時に一つのsession、一名のExecutor、一つの操作とする。
 - Executor交代時は現在操作が完了または中止済みであることを確認し、Incident Commanderがhandoffと権限移譲を記録する。
 - AIはInvestigatorと記録補助を既定とし、Executorになる場合も人間の操作単位の明示承認を省略しない。
+- 本番変更は異なる二人のApproverが同じ`action_id + revision + digest`を承認し、両者をExecutorから分離する。本ハーネスでは`break-glass`は未対応であり、二名承認を短縮または迂回しない。
 
 ## 3. 対応フロー
 
@@ -40,15 +41,15 @@
 本番変更の実行前に、次をすべて満たす。欠落時はfail-closedで実行しない。
 
 - 対象リソース、正確な操作、期待結果、影響範囲が明記されている。
-- 人間のApprover、承認時刻、承認対象が記録され、承認期限内である。
+- 異なる二人のApprover identityとauthority role、各承認時刻、承認結果、承認対象が記録され、両承認が期限内であり、いずれもExecutor identityと異なる。
 - 最小権限の短命credentialを使い、承認範囲外の対象へアクセスできない。
 - timeout、成功条件、停止条件、rollback条件と手順、rollback不能ならその理由がある。
 - 現在のExecutorがsingle-writerで、他の変更作業が停止または調整済みである。
-- 提案を正規化した`digest`、`action_id`、`revision`が人間の承認記録と一致し、承認が失効していない。
+- 提案を正規化した`digest`、`action_id`、`revision`が人間の承認記録と一致し、承認が失効していない。各承認は一意な`approval_id`を持ち、executionが両方を参照する。
 
-承認対象のcanonical仕様は`incident-action/v1`とする。UTF-8で、JSON keyを`version, action_id, revision, target, operation, parameters, expected_result, stop_condition, timeout_seconds, rollback_operation, rollback_parameters, rollback_condition`の固定順序に並べ、区切り以外の空白と末尾改行を含まないJSONを`canonical_payload`とする。文字列はJSON標準のescaping、数値は10進整数を使い、`parameters`と`rollback_parameters`は実際に送信する構造化値を保持し、省略・追加fieldを許さない。`digest`はこのUTF-8 byte列のSHA-256を小文字hexで`sha256:<64hex>`と表す。
+承認対象のcanonical仕様は`incident-action/v1`とする。UTF-8で、JSON keyを`version, action_id, revision, target, operation, parameters, preconditions, expected_result, stop_condition, timeout_seconds, rollback_operation, rollback_parameters, rollback_preconditions, rollback_condition`の固定順序に並べ、区切り以外の空白と末尾改行を含まないJSONを`canonical_payload`とする。文字列はJSON標準のescaping、数値は10進整数を使い、`parameters`、対象resourceのrevision・ETag・expected status等を保持する`preconditions`、`rollback_parameters`、rollback直前に必要なrevision等を保持する`rollback_preconditions`は実際に検証・送信する構造化値を保持し、省略・追加fieldを許さない。`digest`はこのUTF-8 byte列のSHA-256を小文字hexで`sha256:<64hex>`と表す。
 
-実行直前にproposal fieldsからcanonical payloadとdigestを再計算し、保存済み`canonical_payload`、proposal、approvalの`action_id + revision + digest`へ完全一致することを照合する。通常実行では実送信直前の`target`、`operation`、`parameters`をproposalの同名fieldと完全一致させる。rollbackでは実送信直前の`target`、`operation`、`parameters`をproposalの`target`、`rollback_operation`、`rollback_parameters`と完全一致させる。executionとrollbackも同じdigestへ束縛する。差異があればfail-closedとし、proposalのrevisionを増やしてpayloadとdigestを再計算し、旧承認を失効させて再承認を得る。不一致・期限切れ・曖昧な正規化もfail-closedとする。
+実行直前にproposal fieldsからcanonical payloadとdigestを再計算し、保存済み`canonical_payload`、proposal、approvalの`action_id + revision + digest`へ完全一致することを照合する。通常実行では実送信直前の`target`、`operation`、`parameters`、`preconditions`をproposalの同名fieldと完全一致させ、CAS、If-Matchまたはleaseで原子的に適用する。rollbackでは実送信直前の`target`、`operation`、`parameters`、`preconditions`をproposalの`target`、`rollback_operation`、`rollback_parameters`、`rollback_preconditions`と完全一致させ、同じく条件付きで原子的に適用する。executionとrollbackも同じdigestへ束縛する。差異があればfail-closedとし、proposalのrevisionを増やしてpayloadとdigestを再計算し、旧承認を失効させて再承認を得る。不一致・期限切れ・曖昧な正規化もfail-closedとする。Approverの適格性は実行基盤がauthority mappingと照合し、状態ファイルのrole文字列だけでは認可しない。
 
 一操作ごとに結果を検証する。対象不一致、想定外の出力、指標悪化、timeout、権限境界違反、承認範囲逸脱があれば後続操作を止める。Hooksの`PreToolUse`によるdenyや`PostToolUse`による記録は多層防御として利用できるが、Hookだけを認可境界にしない。
 
@@ -78,6 +79,8 @@
 状態ファイルにはseverity、影響、指揮者、現在状態、timeline、仮説、証拠、action proposal、approval、execution、操作ごとのrollback、次回確認時刻、未解決事項、handoff先を保持する。各イベントはUTC時刻、actor/role、session/trace/span、target、operation、result、exit code、根拠を可能な範囲で保持する。秘密情報や生のプロンプトを埋め込まない。
 
 ## 8. Handoffと事後分析
+
+共通のリスク階層、Decision Packet、承認者資格、監査要件は[Human Gate Policy](../../human-gate-policy.md)を正本とする。本設計の操作単位承認、digest束縛、single-writer、rollback、観測窓はより厳しい追加条件として優先する。
 
 handoffでは、現在の影響と指標、実施操作と結果、未検証の仮説、現在有効な緩和、rollback可能期限、次回確認時刻、未解決事項と所有者を読み上げ、受領者を記録する。セッション終了・compaction前にも同じ内容を状態ファイルへ反映する。
 
