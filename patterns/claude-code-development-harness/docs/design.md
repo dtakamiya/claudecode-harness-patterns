@@ -512,16 +512,24 @@ repository/
 Evaluatorは、作成者の作業ディレクトリ名ではなく、不変なレビュー対象を受け取る。
 
 ```yaml
+# docs/features/order/reviews/targets/TASK-004-implementation.yaml
 review_target:
   kind: implementation_review
   task: TASK-004
   commit_sha: abc123def456
   diff_base_sha: 789xyz000111
   changed_files_manifest: docs/status/changes/TASK-004.yaml
+  preparatory_refactor_used: true
+  preparatory_checkpoint_ref: docs/status/checkpoints/TASK-004-preparatory-refactor.yaml
   artifact_hashes:
     docs/features/order/design/order-component.md: sha256:...
+    docs/status/checkpoints/TASK-004-preparatory-refactor.yaml: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
   worktree_source_verified: true
 ```
+
+`preparatory_refactor_used: true`の場合、`IMPLEMENTATION_REVIEW_TARGET`のreview target schemaに`preparatory_checkpoint_ref`を必須とし、`artifact_hashes`のcheckpoint hashをGateRunの`checkpoint_artifact_hash`と一致させる。欠落・不一致・形式不正はfail-closedとする。
+
+`IMPLEMENTATION_REVIEW_TARGET` blockでは`preparatory_refactor_used`、`preparatory_checkpoint_ref`、checkpoint artifact mappingをsingleton keyとし、各出現回数が1でなければfail-closedとする。
 
 次のいずれかを採用する。
 
@@ -823,11 +831,11 @@ UTケース設計
 ↓
 UT作成 → RED確認
 ↓
-最小実装 → GREEN確認
+最小実装 → GREEN_CONFIRMATION
 ↓
 REFACTOR
 ↓
-関連UT・全UT
+対象UT・関連UT・全UT → POST_REFACTOR_GREEN
 ↓
 Integration Test作成・更新
 ↓
@@ -858,7 +866,7 @@ Integration Test実行
 
 - 失敗理由をタスクまたは状態ファイルへ記録する。
 
-## 6.4 GREEN Gate
+## 6.4 GREEN_CONFIRMATION
 
 - 対象UT、関連UT、全UTが成功している。
 
@@ -874,14 +882,34 @@ Integration Test実行
 
 - リファクタリング中もUTを短い間隔で実行する。
 
-- リファクタリング後に全UTと必要なIntegration Testを再実行する。
+- リファクタリング後に対象・関連・全UTを再実行する。
+
+- `POST_REFACTOR_GREEN`は、リファクタリング後の対象・関連・全UTが成功し、コマンド、終了コード、結果要約を記録した状態とする。これを満たすまでレビュー対象を固定しない。
+
+- 通常のREDを安全に書けない構造の場合に限り、`PREPARATORY_REFACTOR`を例外として許可する。baseline GREENを確認し、既存挙動をcharacterization testで保護して`GREEN_CONFIRMATION`を記録した後、振る舞いを変えない最小の構造整理を行い、同じテストの成功を再確認してから通常のREDへ進む。
+
+- `PREPARATORY_REFACTOR`では、characterization test集合を`GREEN_CONFIRMATION`後に固定し、前後で同一commandを実行する。固定後のテスト削除・変更・skip、assertion弱体化を禁止し、前後のtest artifact hashが完全一致しなければ失敗とする。
+
+- 小規模な`PREPARATORY_REFACTOR`は`baseline_commit`、`result_commit`、`diff_base`、前後の`diff_hash`、同一の`test_command`、各`test_artifact_hash`、結果要約をcheckpointへ記録する。
+
+- `PREPARATORY_REFACTOR`のcheckpoint evidenceは最終的な`IMPLEMENTATION_REVIEW_TARGET`へ含める。独立レビューが必要、複数責務・複数component、architecture判断、または大規模変更なら別Development taskへ昇格する。
+
+- `PREPARATORY_REFACTOR`では公開API、永続化形式、認証・認可、監査、秘密情報境界を変更しない。必要な場合は機能実装と分離した独立Development taskへ昇格する。
+
+- PHASE-7の`POST_REFACTOR_GREEN`はUTだけを対象とし、Integration Testの作成・更新・実行はPHASE-8で行う。
 
 ## 6.6 Implementation Evaluation Gate
 
-PHASE-7では、`UNIT_TEST_GREEN`の後に`IMPLEMENTATION_REVIEW_TARGET`を固定し、同じ対象を独立したImplementation Evaluatorが評価する。`IMPLEMENTATION_EVALUATION`がPASSするまでPHASE-8へ進まない。
+PHASE-7では、`GREEN_CONFIRMATION`の後にREFACTORを完了し、`POST_REFACTOR_GREEN`として`UNIT_TEST_GREEN` GateRunをPASSさせてから`IMPLEMENTATION_REVIEW_TARGET`を固定する。同じ対象を独立したImplementation Evaluatorが評価し、`IMPLEMENTATION_EVALUATION`がPASSするまでPHASE-8へ進まない。
+
+Implementation Evaluatorはproduction diffと`preparatory_refactor_used`宣言の一致を検査し、不一致ならfail-closedで差し戻す。
 
 ```text
-UNIT_TEST_GREEN
+GREEN_CONFIRMATION
+  ↓
+REFACTOR
+  ↓
+POST_REFACTOR_GREEN
   ↓
 IMPLEMENTATION_REVIEW_TARGET
   ↓
@@ -1176,18 +1204,51 @@ phase_run:
 # docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml
 gate_run_id: gate-run-TASK-004-unit-test-green-007
 gate_definition: UNIT_TEST_GREEN
+stage: POST_REFACTOR_GREEN
 phase_run_id: phase-run-TASK-004-007
 task: TASK-004
 input_revision: 41
 evaluated_commit: abc123def456
+result_commit: abc123def456
 status: passed
 started_at: 2026-07-14T21:59:31+09:00
 finished_at: 2026-07-14T22:00:00+09:00
 artifact_refs:
   - docs/status/changes/TASK-004.yaml
 test_evidence_refs:
-  - docs/status/agent-runs/TASK-004/run-20260714T215500.stdout.redacted.log
+  - docs/status/test-evidence/TASK-004-post-refactor-green.yaml
+test_artifact_hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+command: ./gradlew test
+exit_code: 0
+result_summary: 既存を含む対象・関連・全UT成功
+preparatory_refactor_used: true
+preparatory_refactor:
+  checkpoint_ref: docs/status/checkpoints/TASK-004-preparatory-refactor.yaml
+  checkpoint_artifact_hash: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+  baseline_commit: 789xyz000111
+  preparatory_result_commit: 890xyz111222
+  diff_base: 789xyz000111
+  before_diff_hash: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  after_diff_hash: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+  characterization_tests_locked_after_green_confirmation: true
+  before_command: ./gradlew characterizationTest
+  before_exit_code: 0
+  before_test_evidence_ref: docs/status/test-evidence/TASK-004-preparatory-before.yaml
+  before_test_artifact_hash: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  after_command: ./gradlew characterizationTest
+  after_exit_code: 0
+  after_test_evidence_ref: docs/status/test-evidence/TASK-004-preparatory-after.yaml
+  after_test_artifact_hash: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  preparatory_result_summary: 前後でcharacterization test集合とartifact hashが一致
 ```
+
+`POST_REFACTOR_GREEN`は新しい正式ゲートではなく、既存の`UNIT_TEST_GREEN` GateRunにおけるREFACTOR後の完了段階である。`evaluated_commit`と`result_commit`は参照元PHASE-7の`result_commit`に一致させる。`test_evidence_refs`が指す証跡も同じcommit上で生成し、実行した`command`、`exit_code`、`result_summary`、改変検知用の64桁SHA-256 `test_artifact_hash`を束縛する。
+
+`gate_definition: UNIT_TEST_GREEN`の場合、runtimeは`stage: POST_REFACTOR_GREEN`とPOST完了証跡の全fieldを必須とし、欠落・不一致をfail-closedにする。
+
+`preparatory_refactor_used`はbooleanの必須fieldとする。`true`なら`preparatory_refactor` objectと前後各exit code 0、test evidence参照、完全一致するartifact hash、同一commandを必須とする。`false`ならRED前のproduction diffがないことを機械確認する。
+
+`preparatory_refactor`を含む場合はcheckpoint、commit、diff、固定したcharacterization test集合、同一command、完全一致する前後のtest artifact hash、結果要約を検証する。これらの欠落、不一致、形式不正、または固定後のテスト変更を検出した場合はfail-closedとする。
 
 ```yaml
 # 実装評価用targetと評価結果の最小例
@@ -1267,7 +1328,7 @@ requested_gate_transition:
 | IMPLEMENTATION_PLAN | タスク粒度、依存、UT/IT、DoDがレビュー済み | 実装計画 |
 | TEST_DESIGN | UT/IT観点、正常・異常・境界、データが定義 | テスト設計 |
 | UNIT_TEST_RED       | UTが意図した理由で失敗                       | UT作成                 |
-| UNIT_TEST_GREEN     | 対象・関連・全UT成功、テスト弱体化なし       | 実装                   |
+| UNIT_TEST_GREEN     | `POST_REFACTOR_GREEN`完了、対象・関連・全UT成功、テスト弱体化なし、result_commitに証跡を束縛 | 実装 |
 | IMPLEMENTATION_REVIEW_TARGET | PHASE-7のcommit SHA、diff base、変更一覧・成果物ハッシュが実装評価用に固定済み | Generator / Orchestrator |
 | ACCESS_POLICY | manifestのaccess policyが、許可されたenforcement profileで機械的に強制されている | Context Builder / Orchestrator |
 | STATE_REVISION | progress revisionとGit SHAが一致し、single writer更新に成功 | Orchestrator |
@@ -1806,7 +1867,7 @@ review:
 ## J.1 変更点
 
 - PhaseDefinitionと品質ゲートのIDを正規化した。
-- PHASE-7の出口を`IMPLEMENTATION_EVALUATION`へ統一し、`UNIT_TEST_GREEN → IMPLEMENTATION_REVIEW_TARGET → IMPLEMENTATION_EVALUATION`の順序を明記した。
+- PHASE-7の出口を`IMPLEMENTATION_EVALUATION`へ統一し、`GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREEN（UNIT_TEST_GREEN GateRun PASS）→ IMPLEMENTATION_REVIEW_TARGET → IMPLEMENTATION_EVALUATION`の順序を明記した。
 - PHASE-8のIT・UI変更を含む`CODE_REVIEW_TARGET`をPHASE-9直前に固定するよう、レビュー対象を2種類へ分離した。
 - Context Builderを正式なAgentDefinitionとして登録した。
 - Development Harnessへ独立Security Reviewerと、ローカルpreview限定の専用UI Verifierによる条件付き`UI_VERIFICATION`を追加した。

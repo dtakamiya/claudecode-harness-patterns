@@ -32,7 +32,7 @@ User
 | Branch | git状態を確認し、featureブランチを作成または選択 | main/master以外で、開始時SHAを記録済み |
 | Explore / Baseline | `CLAUDE.md`等の規約、類似実装、テスト、コマンドを確認し、変更前検証を実行 | 変更候補とbaseline証跡が存在 |
 | Micro Plan | 対象ファイル、RED、最小実装、検証を最大5項目にする | 各受入条件に検証方法がある |
-| TDD | RED → GREEN → REFACTORを小さく反復 | 新規・関連テストが成功 |
+| TDD | RED → GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREENを小さく反復 | POST_REFACTOR_GREENを確認済み |
 | Verify | test、typecheck/lint/build、UIを検証 | 必須コマンドが終了コード0 |
 | 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件 |
 | Handoff | 差分と証跡を最終回答へ記録 | 必須項目がすべて存在 |
@@ -55,8 +55,11 @@ main/master上ではファイルを書き換えない。既存作業を保護し
 
 - REDでは、追加したテストが期待した理由で失敗することを確認する。
 - production code変更前に、採用する既存のtest/typecheck/lint/buildを実行し、開始時Git SHA、コマンド、終了コード、結果要約をbaselineとして保存する。実行不能な項目は理由を記録し、完了時に未検証として扱う。
-- GREENでは、そのテストを通す最小差分だけを実装する。
+- GREEN_CONFIRMATIONでは、そのテストを通す最小差分だけを実装する。
 - REFACTORは重複除去など現在の差分に必要な範囲に限る。
+- REFACTOR後に新規・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。
+- テストの削除・変更・skip、assertionの弱体化でGREENにしない。
+- `PREPARATORY_REFACTOR`が必要なら実装せず、別Development taskへ昇格する。
 - Verifyではプロジェクト既存のコマンドを使い、コマンド、終了コード、結果要約を残す。失敗を無視するフラグ、テスト削除、型エラー抑制でゲートを通さない。
 - baseline由来の既知の失敗と新規失敗を区別する。新規失敗は完了をブロックする。
 
@@ -68,6 +71,7 @@ main/master上ではファイルを書き換えない。既存作業を保護し
 - 要件またはアーキテクチャの選択が必要
 - DB migration、公開APIの破壊的変更、本番操作、高リスク権限が必要
 - 既存テスト基盤がなく、その新設自体が独立した設計課題になる
+- 大規模リファクタリング、複数責務・コンポーネント境界の再設計、または機能差分と分離すべき構造変更が必要
 - 同じ原因に対する修正が2回連続で失敗した
 - レビュー修正後も同じblocking指摘が再発した
 

@@ -4,6 +4,8 @@ set -u
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 DESIGN_FILE="$ROOT_DIR/patterns/claude-code-development-harness/docs/design.md"
+LIGHTWEIGHT_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/docs/design.md"
+MICRO_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/docs/design.md"
 ERRORS=0
 
 fail() {
@@ -11,10 +13,62 @@ fail() {
   ERRORS=$((ERRORS + 1))
 }
 
-if [ ! -f "$DESIGN_FILE" ] || [ ! -r "$DESIGN_FILE" ] || [ -L "$DESIGN_FILE" ]; then
-  printf '%s\n' "FAIL: 設計書が通常の読取り可能ファイルではない: $DESIGN_FILE" >&2
-  exit 1
-fi
+assert_line() {
+  expected=$1
+  file=$2
+  message=$3
+  if ! grep -Fxq -- "$expected" "$file"; then
+    fail "$message"
+  fi
+}
+
+assert_unique_line() {
+  expected=$1
+  file=$2
+  message=$3
+  count=$(grep -Fxc -- "$expected" "$file")
+  if [ "$count" -ne 1 ]; then
+    fail "$message: count=$count"
+  fi
+}
+
+assert_key_once() {
+  key=$1
+  file=$2
+  message=$3
+  count=$(awk -F: -v key="$key" '
+    {
+      candidate = $1
+      gsub(/^ +| +$/, "", candidate)
+      if (candidate == key) count++
+    }
+    END { print count + 0 }
+  ' "$file")
+  if [ "$count" -ne 1 ]; then
+    fail "$message: count=$count"
+  fi
+}
+
+assert_order_in_file() {
+  file=$1
+  first=$2
+  second=$3
+  message=$4
+  if ! awk -v first="$first" -v second="$second" '
+    $0 == first && !first_line { first_line = NR }
+    $0 == second && !second_line { second_line = NR }
+    END { exit !(first_line && second_line && first_line < second_line) }
+  ' "$file"; then
+    fail "$message"
+  fi
+}
+
+for design_path in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+  if [ ! -f "$design_path" ] || [ ! -r "$design_path" ] || [ -L "$design_path" ]; then
+    printf '%s\n' "FAIL: 設計書が通常の読取り可能ファイルではない: $design_path" >&2
+    exit 1
+  fi
+done
 
 TMP_BASE=${TMPDIR:-/tmp}
 WORK_DIR=$(mktemp -d "$TMP_BASE/doc-consistency.XXXXXX") || exit 1
@@ -25,6 +79,48 @@ AGENTS_FILE="$WORK_DIR/agents"
 QUALITY_FILE="$WORK_DIR/quality-gates"
 STATE_FILE="$WORK_DIR/state-gates"
 DIRECTORY_AGENTS_FILE="$WORK_DIR/directory-agents"
+UNIT_TEST_GREEN_GATE_FILE="$WORK_DIR/unit-test-green-gate"
+IMPLEMENTATION_GATE_SECTION_FILE="$WORK_DIR/implementation-gate-section"
+IMPLEMENTATION_REVIEW_TARGET_FILE="$WORK_DIR/implementation-review-target"
+
+assert_unique_line '## 6.5 REFACTOR Gate' "$DESIGN_FILE" 'Development REFACTOR節が一意でない'
+assert_unique_line '## 6.1 標準サイクル' "$DESIGN_FILE" 'Development標準サイクル節が一意でない'
+assert_unique_line '## 6.6 Implementation Evaluation Gate' "$DESIGN_FILE" 'Development Implementation Evaluation節が一意でない'
+assert_unique_line '# 7. Integration Test方針' "$DESIGN_FILE" 'Development Integration Test節が一意でない'
+assert_unique_line '# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml' "$DESIGN_FILE" 'UNIT_TEST_GREEN GateRun例が一意でない'
+assert_unique_line '# docs/features/order/reviews/targets/TASK-004-implementation.yaml' "$DESIGN_FILE" 'IMPLEMENTATION_REVIEW_TARGET schema例が一意でない'
+assert_unique_line '### TDDと検証証跡' "$LIGHTWEIGHT_DESIGN_FILE" 'Lightweight TDD節が一意でない'
+assert_unique_line '## 4. TDDと最小修正' "$MICRO_DESIGN_FILE" 'Micro TDD節が一意でない'
+
+if [ "$(grep -Fxc -- '# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml' "$DESIGN_FILE")" -eq 1 ]; then
+  awk '
+    $0 == "# docs/status/gate-runs/gate-run-TASK-004-unit-test-green-007.yaml" { in_block = 1 }
+    in_block { print }
+    in_block && $0 == "```" { exit }
+  ' "$DESIGN_FILE" > "$UNIT_TEST_GREEN_GATE_FILE"
+else
+  : > "$UNIT_TEST_GREEN_GATE_FILE"
+fi
+
+if [ "$(grep -Fxc -- '## 6.6 Implementation Evaluation Gate' "$DESIGN_FILE")" -eq 1 ] && [ "$(grep -Fxc -- '# 7. Integration Test方針' "$DESIGN_FILE")" -eq 1 ]; then
+  awk '
+    $0 == "## 6.6 Implementation Evaluation Gate" { in_section = 1 }
+    in_section { print }
+    in_section && $0 == "# 7. Integration Test方針" { exit }
+  ' "$DESIGN_FILE" > "$IMPLEMENTATION_GATE_SECTION_FILE"
+else
+  : > "$IMPLEMENTATION_GATE_SECTION_FILE"
+fi
+
+if [ "$(grep -Fxc -- '# docs/features/order/reviews/targets/TASK-004-implementation.yaml' "$DESIGN_FILE")" -eq 1 ]; then
+  awk '
+    $0 == "# docs/features/order/reviews/targets/TASK-004-implementation.yaml" { in_block = 1 }
+    in_block { print }
+    in_block && $0 == "```" { exit }
+  ' "$DESIGN_FILE" > "$IMPLEMENTATION_REVIEW_TARGET_FILE"
+else
+  : > "$IMPLEMENTATION_REVIEW_TARGET_FILE"
+fi
 
 if ! awk -F'|' '
   /^`PhaseDefinition`の実値は/ { in_phases = 1; next }
@@ -234,6 +330,76 @@ fi
 if ! grep -Fxq 'ui-verifier|PHASE-8|ui_verifier' "$AGENTS_FILE"; then
   fail 'UI_VERIFICATIONを実行する専用Agent/profileが定義されていない'
 fi
+if grep -Fxq 'POST_REFACTOR_GREEN' "$QUALITY_FILE" || grep -Fxq 'post_refactor_green|passed' "$STATE_FILE"; then
+  fail 'POST_REFACTOR_GREENを新しい正式ゲートとして追加してはならない'
+fi
+assert_line '| UNIT_TEST_GREEN     | `POST_REFACTOR_GREEN`完了、対象・関連・全UT成功、テスト弱体化なし、result_commitに証跡を束縛 | 実装 |' "$DESIGN_FILE" '正式UNIT_TEST_GREENがPOST完了専用になっていない'
+if grep -Fq 'PREPARATORY_REFACTOR_REVIEW_TARGET' "$DESIGN_FILE"; then
+  fail 'PREPARATORY_REFACTOR専用の新しいレビューゲートを追加してはならない'
+fi
+assert_line 'stage: POST_REFACTOR_GREEN' "$UNIT_TEST_GREEN_GATE_FILE" 'UNIT_TEST_GREEN GateRunにPOST完了段階がない'
+assert_line 'evaluated_commit: abc123def456' "$UNIT_TEST_GREEN_GATE_FILE" 'POST完了証跡のevaluated_commit束縛がない'
+assert_line 'result_commit: abc123def456' "$UNIT_TEST_GREEN_GATE_FILE" 'POST完了証跡のresult_commit束縛がない'
+assert_line 'test_evidence_refs:' "$UNIT_TEST_GREEN_GATE_FILE" 'POST完了証跡にtest evidence参照がない'
+assert_line 'command: ./gradlew test' "$UNIT_TEST_GREEN_GATE_FILE" 'POST完了証跡に実行commandがない'
+assert_line 'exit_code: 0' "$UNIT_TEST_GREEN_GATE_FILE" 'POST完了証跡にexit codeがない'
+assert_line 'result_summary: 既存を含む対象・関連・全UT成功' "$UNIT_TEST_GREEN_GATE_FILE" 'GateRun schemaに結果summaryがない'
+if ! grep -Eq '^test_artifact_hash: sha256:[0-9a-f]{64}$' "$UNIT_TEST_GREEN_GATE_FILE"; then
+  fail 'POST完了証跡のtest artifact hashがSHA-256形式でない'
+fi
+assert_line 'preparatory_refactor_used: true' "$UNIT_TEST_GREEN_GATE_FILE" 'preparatory_refactor_used宣言がない'
+assert_line '  characterization_tests_locked_after_green_confirmation: true' "$UNIT_TEST_GREEN_GATE_FILE" 'characterization test集合の固定状態がない'
+assert_line '  before_command: ./gradlew characterizationTest' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY前のcommandがない'
+assert_line '  after_command: ./gradlew characterizationTest' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY前後で同一commandでない'
+assert_line '  before_exit_code: 0' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY前のexit codeが0でない'
+assert_line '  after_exit_code: 0' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY後のexit codeが0でない'
+assert_line '  before_test_evidence_ref: docs/status/test-evidence/TASK-004-preparatory-before.yaml' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY前のtest evidence参照がない'
+assert_line '  after_test_evidence_ref: docs/status/test-evidence/TASK-004-preparatory-after.yaml' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY後のtest evidence参照がない'
+assert_line '  preparatory_result_summary: 前後でcharacterization test集合とartifact hashが一致' "$UNIT_TEST_GREEN_GATE_FILE" 'PREPARATORY結果summaryがない'
+before_hash=$(sed -n 's/^  before_test_artifact_hash: sha256:\([0-9a-f][0-9a-f]*\)$/\1/p' "$UNIT_TEST_GREEN_GATE_FILE")
+after_hash=$(sed -n 's/^  after_test_artifact_hash: sha256:\([0-9a-f][0-9a-f]*\)$/\1/p' "$UNIT_TEST_GREEN_GATE_FILE")
+if ! printf '%s\n' "$before_hash" | grep -Eq '^[0-9a-f]{64}$' || [ "$before_hash" != "$after_hash" ]; then
+  fail 'PREPARATORY前後のtest artifact hashが完全一致するSHA-256でない'
+fi
+before_command=$(sed -n 's/^  before_command: //p' "$UNIT_TEST_GREEN_GATE_FILE")
+after_command=$(sed -n 's/^  after_command: //p' "$UNIT_TEST_GREEN_GATE_FILE")
+if [ -z "$before_command" ] || [ "$before_command" != "$after_command" ]; then
+  fail 'PREPARATORY前後のcommandが同一でない'
+fi
+for singleton_key in gate_run_id gate_definition stage phase_run_id task input_revision evaluated_commit result_commit status test_evidence_refs test_artifact_hash command exit_code result_summary preparatory_refactor_used preparatory_refactor checkpoint_ref checkpoint_artifact_hash baseline_commit preparatory_result_commit diff_base before_diff_hash after_diff_hash characterization_tests_locked_after_green_confirmation before_command before_exit_code before_test_evidence_ref before_test_artifact_hash after_command after_exit_code after_test_evidence_ref after_test_artifact_hash preparatory_result_summary; do
+  assert_key_once "$singleton_key" "$UNIT_TEST_GREEN_GATE_FILE" "UNIT_TEST_GREEN GateRunのsingleton key '$singleton_key' が一意でない"
+done
+assert_line '  preparatory_refactor_used: true' "$IMPLEMENTATION_REVIEW_TARGET_FILE" 'review targetにPREPARATORY使用宣言がない'
+assert_line '  preparatory_checkpoint_ref: docs/status/checkpoints/TASK-004-preparatory-refactor.yaml' "$IMPLEMENTATION_REVIEW_TARGET_FILE" 'review targetにPREPARATORY checkpoint参照がない'
+assert_line '    docs/status/checkpoints/TASK-004-preparatory-refactor.yaml: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' "$IMPLEMENTATION_REVIEW_TARGET_FILE" 'review targetのartifact_hashesにcheckpoint hashがない'
+for review_target_singleton_key in preparatory_refactor_used preparatory_checkpoint_ref docs/status/checkpoints/TASK-004-preparatory-refactor.yaml; do
+  assert_key_once "$review_target_singleton_key" "$IMPLEMENTATION_REVIEW_TARGET_FILE" "IMPLEMENTATION_REVIEW_TARGETのsingleton key '$review_target_singleton_key' が一意でない"
+done
+assert_line '`IMPLEMENTATION_REVIEW_TARGET` blockでは`preparatory_refactor_used`、`preparatory_checkpoint_ref`、checkpoint artifact mappingをsingleton keyとし、各出現回数が1でなければfail-closedとする。' "$DESIGN_FILE" 'IMPLEMENTATION_REVIEW_TARGET singleton key規則がない'
+gate_checkpoint_hash=$(sed -n 's/^  checkpoint_artifact_hash: sha256:\([0-9a-f][0-9a-f]*\)$/\1/p' "$UNIT_TEST_GREEN_GATE_FILE")
+target_checkpoint_hash=$(sed -n 's/^    docs\/status\/checkpoints\/TASK-004-preparatory-refactor.yaml: sha256:\([0-9a-f][0-9a-f]*\)$/\1/p' "$IMPLEMENTATION_REVIEW_TARGET_FILE")
+if ! printf '%s\n' "$gate_checkpoint_hash" | grep -Eq '^[0-9a-f]{64}$' || [ "$gate_checkpoint_hash" != "$target_checkpoint_hash" ]; then
+  fail 'GateRunとIMPLEMENTATION_REVIEW_TARGETのcheckpoint hashが一致するSHA-256でない'
+fi
+assert_line '`preparatory_refactor_used: true`の場合、`IMPLEMENTATION_REVIEW_TARGET`のreview target schemaに`preparatory_checkpoint_ref`を必須とし、`artifact_hashes`のcheckpoint hashをGateRunの`checkpoint_artifact_hash`と一致させる。欠落・不一致・形式不正はfail-closedとする。' "$DESIGN_FILE" 'PREPARATORY checkpointのreview target fail-closed規則がない'
+assert_order_in_file "$IMPLEMENTATION_GATE_SECTION_FILE" 'POST_REFACTOR_GREEN' 'IMPLEMENTATION_REVIEW_TARGET' 'PHASE-7のPOST_REFACTOR_GREENとレビュー対象固定の順序が不正'
+assert_line 'PHASE-7では、`GREEN_CONFIRMATION`の後にREFACTORを完了し、`POST_REFACTOR_GREEN`として`UNIT_TEST_GREEN` GateRunをPASSさせてから`IMPLEMENTATION_REVIEW_TARGET`を固定する。同じ対象を独立したImplementation Evaluatorが評価し、`IMPLEMENTATION_EVALUATION`がPASSするまでPHASE-8へ進まない。' "$DESIGN_FILE" 'Developmentの規範フローが不正'
+assert_line '- `PREPARATORY_REFACTOR`では、characterization test集合を`GREEN_CONFIRMATION`後に固定し、前後で同一commandを実行する。固定後のテスト削除・変更・skip、assertion弱体化を禁止し、前後のtest artifact hashが完全一致しなければ失敗とする。' "$DESIGN_FILE" '準備的リファクタリングのテスト固定規則が不十分'
+assert_line '- `PREPARATORY_REFACTOR`のcheckpoint evidenceは最終的な`IMPLEMENTATION_REVIEW_TARGET`へ含める。独立レビューが必要、複数責務・複数component、architecture判断、または大規模変更なら別Development taskへ昇格する。' "$DESIGN_FILE" '準備的リファクタリングのレビュー対象と昇格条件が不十分'
+assert_line '- `PREPARATORY_REFACTOR`では公開API、永続化形式、認証・認可、監査、秘密情報境界を変更しない。必要な場合は機能実装と分離した独立Development taskへ昇格する。' "$DESIGN_FILE" '準備的リファクタリングの禁止境界が不十分'
+assert_line '- テストの削除・変更・skip、assertionの弱体化でGREENにしない。' "$LIGHTWEIGHT_DESIGN_FILE" 'Lightweight Harnessのテスト保護規則が不十分'
+assert_line '- production codeは回帰テストのRED後にだけ変更する。RED前のproduction差分を禁止し、例外は実装しない。' "$MICRO_DESIGN_FILE" 'Micro HarnessのRED前production変更禁止が不明確'
+assert_line '| TDD | RED → GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREENを小さく反復 | POST_REFACTOR_GREENを確認済み |' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightのTDDフローが不正'
+assert_line '- REFACTOR後に新規・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightのPOST完了条件が不十分'
+assert_line '- `PREPARATORY_REFACTOR`が必要なら実装せず、別Development taskへ昇格する。' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightのPREPARATORY昇格条件が不十分'
+assert_line '| Fix | 根本原因への最小差分を実装 | 回帰テストが成功（GREEN_CONFIRMATION） |' "$MICRO_DESIGN_FILE" 'MicroのFixフローが不正'
+assert_line '- REFACTOR後に回帰・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。' "$MICRO_DESIGN_FILE" 'MicroのPOST完了条件が不十分'
+assert_line '- `PREPARATORY_REFACTOR`が必要なら実装せず、Development Harnessの別taskへ昇格する。' "$MICRO_DESIGN_FILE" 'MicroのPREPARATORY昇格条件が不十分'
+assert_line '- PHASE-7の`POST_REFACTOR_GREEN`はUTだけを対象とし、Integration Testの作成・更新・実行はPHASE-8で行う。' "$DESIGN_FILE" 'PHASE-7とPHASE-8のテスト責務が不明確'
+assert_line '- PHASE-7の出口を`IMPLEMENTATION_EVALUATION`へ統一し、`GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREEN（UNIT_TEST_GREEN GateRun PASS）→ IMPLEMENTATION_REVIEW_TARGET → IMPLEMENTATION_EVALUATION`の順序を明記した。' "$DESIGN_FILE" '現行版変更履歴のPHASE-7順序が古い'
+assert_line '`gate_definition: UNIT_TEST_GREEN`の場合、runtimeは`stage: POST_REFACTOR_GREEN`とPOST完了証跡の全fieldを必須とし、欠落・不一致をfail-closedにする。' "$DESIGN_FILE" 'UNIT_TEST_GREENのruntime fail-closed規則がない'
+assert_line '`preparatory_refactor_used`はbooleanの必須fieldとする。`true`なら`preparatory_refactor` objectと前後各exit code 0、test evidence参照、完全一致するartifact hash、同一commandを必須とする。`false`ならRED前のproduction diffがないことを機械確認する。' "$DESIGN_FILE" 'PREPARATORY条件分岐schemaが不十分'
+assert_line 'Implementation Evaluatorはproduction diffと`preparatory_refactor_used`宣言の一致を検査し、不一致ならfail-closedで差し戻す。' "$DESIGN_FILE" 'PREPARATORY宣言とdiffのEvaluator検査がない'
 if grep -Eq 'docs/(requirements|design|plans|tests|reviews|handoffs)/' "$DESIGN_FILE"; then
   fail '機能固有成果物がdocs/features/<feature-id>/外の旧global pathを参照している'
 fi
