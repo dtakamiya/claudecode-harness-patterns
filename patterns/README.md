@@ -2,6 +2,8 @@
 
 ファイル数は目安とし、リスク、波及範囲、再開性を優先する。
 
+AI支援変更の設計意図は[Change Intent Record](change-intent-record.md)を共通規約とする。
+
 | 判断軸 | Micro Bugfix | Lightweight Feature | Development | Incident Response |
 |---|---|---|---|---|
 | 主用途 | 原因が特定できる局所バグ | 受入条件が確定した小機能 | 要件・設計を含む開発 | 本番サービス障害の収束 |

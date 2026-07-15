@@ -29,8 +29,10 @@
 3. **Micro Plan:** 変更対象、テスト観点、検証コマンドを5項目以内で提示する。範囲超過なら実装前に昇格する。
 4. **TDD:** 受入条件を表す失敗テスト（RED）を先に追加し、最小実装（GREEN）、必要最小限の整理（REFACTOR）を行う。
 5. **Verify:** 関連テスト、typecheck/lint/build、必要ならUI確認を実行し、コマンドと終了コードを記録する。
-6. **2軸Review:** `code-reviewer`が正確性・回帰を、`security-reviewer`が入力・権限・秘密情報を独立に確認する。blocking指摘と、スコープ内で解消できるnon-blocking指摘を修正して再検証する。
-7. **Handoff:** 変更概要、変更ファイル、検証コマンドと終了コード、レビュー結果、残課題を最終回答にまとめる。
+6. **2軸Review + Human Review:** `code-reviewer`が正確性・回帰を、`security-reviewer`が入力・権限・秘密情報を独立に確認する。blocking指摘の解消後、責任ある人間Reviewerが固定差分、テスト、設計意図を理解して承認する。
+7. **Handoff:** 変更概要、変更ファイル、検証コマンドと終了コード、レビュー結果、Human Review Evidence、残課題を最終回答にまとめる。
+
+Human Review Evidenceは認証済みreview provider、protected branch approvalまたはsigned attestationからread-onlyで取得し、Git内の自己申告を承認根拠にしない。
 
 ## 最小成果物
 
@@ -38,7 +40,9 @@
 - 受入条件を検証するテスト
 - 最終回答の検証証跡と変更ファイル一覧
 
-`progress.yaml`、context manifest、工程別handoff文書、常設のPlanner/Generator/Evaluatorは作りません。判断を残す必要が生じた場合だけ、既存のADRやissueを更新します。
+`progress.yaml`、context manifest、工程別handoff文書、常設のPlanner/Generator/Evaluatorは作りません。非自明な判断は[Change Intent Record](../change-intent-record.md)に従い、Git/version control内の既存成果物へ短く残します。
+
+非自明な設計意図の正本はGit/version control内の既存成果物へ置き、PR、issue、外部文書は固定revision、commit SHAまたはimmutable snapshot付きのsource/mirrorとしてのみ参照する。
 
 ## 適用判定
 

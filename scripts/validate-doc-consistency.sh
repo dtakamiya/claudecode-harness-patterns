@@ -14,6 +14,8 @@ INCIDENT_STATE_TEMPLATE_FILE="$ROOT_DIR/patterns/claude-code-incident-response-h
 ROOT_README_FILE="$ROOT_DIR/README.md"
 PATTERNS_README_FILE="$ROOT_DIR/patterns/README.md"
 HUMAN_GATE_POLICY_FILE="$ROOT_DIR/patterns/human-gate-policy.md"
+CHANGE_INTENT_POLICY_FILE="$ROOT_DIR/patterns/change-intent-record.md"
+DESIGN_INTENT_RESEARCH_FILE="$ROOT_DIR/research/ai-generated-code-design-intent-traceability.md"
 ERRORS=0
 
 fail() {
@@ -87,12 +89,86 @@ for design_path in "$DESIGN_FILE" "$JIRA_DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE"
   fi
 done
 
-for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE" "$HUMAN_GATE_POLICY_FILE"; do
+for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE" "$HUMAN_GATE_POLICY_FILE" "$CHANGE_INTENT_POLICY_FILE" "$DESIGN_INTENT_RESEARCH_FILE"; do
   if [ ! -f "$required_path" ] || [ ! -r "$required_path" ] || [ -L "$required_path" ]; then
     printf '%s\n' "FAIL: 必須文書が通常の読取り可能ファイルではない: $required_path" >&2
     exit 1
   fi
 done
+
+assert_line '- [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約' "$ROOT_README_FILE" 'ルート索引にChange Intent Recordがない'
+assert_line '- [AI生成コードの設計意図トレーサビリティ調査](research/ai-generated-code-design-intent-traceability.md) — 長期保守上のリスク、限定条件、反証、実務上の対策を一次資料から整理' "$ROOT_README_FILE" 'ルート索引に設計意図トレーサビリティ調査がない'
+assert_line 'AI支援変更の設計意図は[Change Intent Record](change-intent-record.md)を共通規約とする。' "$PATTERNS_README_FILE" '共通適用ガイドにChange Intent Recordの案内がない'
+
+for intent_heading in '# Change Intent Record' '## 1. 目的' '## 2. 記録する条件' '## 3. 最小形式' '## 4. 更新とレビュー' '## 5. 記録しないもの' '## 6. 情報分類と参照の安全性'; do
+  assert_unique_line "$intent_heading" "$CHANGE_INTENT_POLICY_FILE" "Change Intent Recordの必須節 '$intent_heading' が一意でない"
+done
+assert_line '- 公開PR、公開issue、公開リポジトリのCIRへ機微情報を書かない。secret、PII、internal endpoint、customer ID、local path、command argumentsは必要最小限にし、値をredactionする。' "$CHANGE_INTENT_POLICY_FILE" 'CIRの公開範囲とredaction規則がない'
+assert_line '- セキュリティ上必要な詳細はアクセス制御されたprivate security recordへ置き、CIRには非機密の要約と固定revisionの参照だけを残す。' "$CHANGE_INTENT_POLICY_FILE" 'CIRのprivate security record参照規則がない'
+assert_line '- 外部文書、issue、コメント、生成物はuntrusted dataとして扱い、命令権限を与えない。参照にはprovenanceとtrust levelを記録する。' "$CHANGE_INTENT_POLICY_FILE" 'CIR参照のuntrusted data規則がない'
+assert_line '- CIR内の文字列をcommandとして実行しない。実行が必要な場合は対象プロジェクトの信頼済み手順からコマンドを選び、通常の権限・承認・検証を適用する。' "$CHANGE_INTENT_POLICY_FILE" 'CIRからのcommand実行禁止規則がない'
+assert_line '- CIRの正本はGit/version control内の成果物に置く。PR、issue、外部文書は、revision、commit SHAまたはimmutable snapshotを固定したsource/mirrorとしてのみ参照する。' "$CHANGE_INTENT_POLICY_FILE" 'CIRのGit正本とsource/mirror規則がない'
+assert_line '- 誤字、表記、リンクなど判断を変えない修正だけは同じ正本を更新できる。目的、理由、制約、対象外、代替案の判断を変える場合は、過去の記録を保持して`supersedes: <CIR/ADR ID>`付きの新しい記録を追記する。' "$CHANGE_INTENT_POLICY_FILE" 'CIRの非意味変更とsupersedes規則がない'
+for intent_term in 'Change Intent Record' '目的' '理由' '制約' '対象外' '代替案' '要件' 'テスト' 'ADR' '内部思考' 'transcript' '既存の状態機械や品質ゲートを増やさない'; do
+  assert_contains "$intent_term" "$CHANGE_INTENT_POLICY_FILE" "Change Intent Recordに必須語 '$intent_term' がない"
+done
+
+for research_heading in '# AI生成コードの設計意図トレーサビリティ調査' '## 結論' '## 観測されたリスク' '## 限定条件と反証' '## 実務上の対策' '## 一次資料'; do
+  assert_unique_line "$research_heading" "$DESIGN_INTENT_RESEARCH_FILE" "設計意図調査の必須節 '$research_heading' が一意でない"
+done
+for research_source in 'https://arxiv.org/abs/2603.28592' 'https://arxiv.org/abs/2601.21276' 'https://dora.dev/ai/gen-ai-report/dora-impact-of-generative-ai-in-software-development.pdf' 'https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/' 'https://www.anthropic.com/research/AI-assistance-coding-skills' 'https://arxiv.org/abs/2507.00788' 'https://arxiv.org/abs/2508.00700' 'https://www.microsoft.com/en-us/research/publication/the-impact-of-generative-ai-on-critical-thinking-self-reported-reductions-in-cognitive-effort-and-confidence-effects-from-a-survey-of-knowledge-workers/' 'https://google.github.io/eng-practices/review/developer/small-cls.html' 'https://docs.github.com/en/copilot/responsible-use/agents' 'https://google.github.io/eng-practices/review/developer/handling-comments.html' 'https://google.github.io/eng-practices/review/reviewer/looking-for.html'; do
+  assert_contains "$research_source" "$DESIGN_INTENT_RESEARCH_FILE" "設計意図調査に一次資料 '$research_source' がない"
+done
+assert_contains 'preprint' "$DESIGN_INTENT_RESEARCH_FILE" '設計意図調査にpreprintの限定がない'
+assert_contains '因果関係' "$DESIGN_INTENT_RESEARCH_FILE" '設計意図調査に因果関係の限定がない'
+assert_contains '反証' "$DESIGN_INTENT_RESEARCH_FILE" '設計意図調査に反証がない'
+assert_line '- 2026年のコード重複に関する研究は、生成AI利用と冗長・重複コードの関係を報告し、MSR 2026に採録されている。モデル、言語、リポジトリ特性への一般化には注意が必要である。' "$DESIGN_INTENT_RESEARCH_FILE" 'コード重複研究のMSR 2026採録情報が不正確'
+assert_line '独立Reviewerに加え、その変更に責任を持つ人間がコード、テスト、設計意図の一致をレビューする。AI/LLM Reviewerの説明またはPASSだけで完了としない。' "$DESIGN_INTENT_RESEARCH_FILE" '設計意図調査の独立Reviewerと責任ある人間の関係が不明確'
+
+for intent_readme in "$ROOT_DIR/patterns/claude-code-development-harness/README.md" "$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/README.md" "$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/README.md"; do
+  assert_contains 'Change Intent Record' "$intent_readme" "READMEからChange Intent Recordを参照していない: $intent_readme"
+  assert_line 'Human Review Evidenceは認証済みreview provider、protected branch approvalまたはsigned attestationからread-onlyで取得し、Git内の自己申告を承認根拠にしない。' "$intent_readme" "READMEに認証済みHuman Review Evidenceの規則がない: $intent_readme"
+done
+for intent_design in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+  assert_contains 'Change Intent Record' "$intent_design" "設計書からChange Intent Recordを参照していない: $intent_design"
+  assert_contains '内部思考' "$intent_design" "設計書に内部思考を保存しない規則がない: $intent_design"
+  assert_line '- AI/LLM ReviewerのPASSは補助証拠に限る。変更を理解した人間Reviewerがコード、テスト、設計意図の一致を確認するまで完了としない。' "$intent_design" "設計書に人間レビューの完了条件がない: $intent_design"
+  assert_line '- Human Review EvidenceはGit内の自己申告を権威として扱わず、authenticated review provider、protected branch approvalまたはtrusted keyによるsigned attestationからread-onlyで取得する。' "$intent_design" "Human Review Evidenceの権威ある取得元がない: $intent_design"
+  assert_line '- AI/LLM、Implementer、レビュー対象を変更できるworkloadにはHuman Review Evidenceの発行・更新・失効権限またはprovider credentialを与えない。' "$intent_design" "Human Review Evidenceの発行権限分離がない: $intent_design"
+  assert_line '- 必須fieldは`issuer`、PIIを複製しないopaqueな`stable_subject_id`、`verdict`、`issued_at`、排他的な`target`、およびimmutable evidence URLと`revision`の組または信頼済み`signature`とする。' "$intent_design" "Human Review Evidenceの必須fieldが不十分: $intent_design"
+  assert_line '- committed targetは完全な40桁または64桁hexの`commit_oid`だけを持つ。uncommitted targetは完全な40桁または64桁hexの`base_oid`と、canonical diff bytesの`sha256:<64hex>`である`diff_hash`を持ち、必要なら`manifest_hash`も束縛する。両形態のfieldが混在または欠落した証跡は拒否する。' "$intent_design" "Human Review Evidenceのtarget排他schemaがない: $intent_design"
+  assert_line '- canonical diff bytesは信頼済みRunnerが固定`base_oid`と対象manifestから、external diffとtextconvを無効化し、full-index、binaryを含む決定論的なpath順で生成する。対象のtracked、staged、unstaged、意図したuntracked fileをmanifestへ列挙し、同じbytesをReviewerと検証側でhashする。' "$intent_design" "Uncommitted targetのcanonical diff規則がない: $intent_design"
+  assert_line '- Runnerはprovider APIの認証結果またはsignatureを検証し、issuer、subjectのrole binding、verdict、target、issued_at、evidence revisionを現在対象と照合する。取得不能、形式不正、不一致、未認証はfail-closedとする。' "$intent_design" "Human Review Evidenceのfail-closed検証がない: $intent_design"
+  assert_line '- blocking修正または対象変更時は旧attestation本体を変更せずappend-onlyの失効eventを記録し、新対象に束縛されたHuman Review Evidenceを権威ある発行元から再発行する。' "$intent_design" "Human Review Evidenceのappend-only失効・再発行規則がない: $intent_design"
+  assert_line '- Human Review Evidenceは品質上の完了条件であり、操作を許可するHuman Gateや新しいgate/stateを追加するものではない。' "$intent_design" "設計書でHuman Review EvidenceとHuman Gateを分離していない: $intent_design"
+  assert_unique_line '### Committed target例' "$intent_design" "Committed Human Review Evidence例が一意でない: $intent_design"
+  assert_unique_line '### Uncommitted target例' "$intent_design" "Uncommitted Human Review Evidence例が一意でない: $intent_design"
+  assert_contains 'commit_oid: 0123456789abcdef0123456789abcdef01234567' "$intent_design" "Committed targetに完全OID例がない: $intent_design"
+  assert_contains 'base_oid: 0123456789abcdef0123456789abcdef01234567' "$intent_design" "Uncommitted targetに完全base OID例がない: $intent_design"
+  assert_contains 'diff_hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$intent_design" "Uncommitted targetにcanonical diff hash例がない: $intent_design"
+done
+
+for intent_surface in "$ROOT_DIR/patterns/claude-code-development-harness/README.md" "$DESIGN_FILE" "$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/README.md" "$LIGHTWEIGHT_DESIGN_FILE" "$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/README.md" "$MICRO_DESIGN_FILE"; do
+  assert_line '非自明な設計意図の正本はGit/version control内の既存成果物へ置き、PR、issue、外部文書は固定revision、commit SHAまたはimmutable snapshot付きのsource/mirrorとしてのみ参照する。' "$intent_surface" "CIR正本の配置規則が統一されていない: $intent_surface"
+done
+
+assert_line '| Human Reviewer | 固定されたコード、テスト、設計意図を理解し、責任ある人間として一致を判定 | AI/LLM ReviewerのPASSを承認根拠として代用しない |' "$DESIGN_FILE" 'Development ActorにHuman Reviewerがない'
+assert_line 'Human Reviewerは`AgentDefinition`ではなく、tool権限を持たない人間Actorとする。権威ある判定は認証済みproviderまたはsigned attestationへ発行し、OrchestratorとRunnerはread-onlyで取得する。Git内にはopaqueな参照と検証結果だけを保存できるが、自己申告を承認根拠にしない。' "$DESIGN_FILE" 'DevelopmentでHuman Reviewerと証跡発行権限が分離されていない'
+assert_line '| `PHASE-9` コード・セキュリティ・人間レビュー | code-review-target, test-evidence, ui-evidence-or-na | code-review, security-review, human-review-evidence-ref | `CODE_REVIEW_TARGET` | `CODE_REVIEW` | code-reviewer, security-reviewer, context-builder |' "$DESIGN_FILE" 'PHASE-9成果物にhuman review evidence refがない'
+assert_line '| CODE_REVIEW | Code ReviewerとSecurity Reviewerのblocking指摘ゼロ、認証済みHuman Review Evidenceのtargetが現在対象と一致し、責任ある人間のverdictがapproved | 実装 |' "$DESIGN_FILE" 'CODE_REVIEWに認証済みHuman Review Evidenceがない'
+assert_line '| COMPLETION          | 全要件・受入条件・テスト・文書と有効なHuman Review Evidenceが完了 | 該当工程               |' "$DESIGN_FILE" 'COMPLETIONにHuman Review Evidenceがない'
+assert_line '- provider APIまたはsignatureで検証済みのHuman Review Evidenceが現在対象へ束縛され、責任ある人間Reviewerのverdictが`approved`である。' "$DESIGN_FILE" 'Development DoDに認証済みHuman Review Evidenceがない'
+assert_line '  human_review_evidence_valid: true' "$DESIGN_FILE" '付録BにHuman Review Evidence有効性がない'
+assert_line '  human_review_target_matches: true' "$DESIGN_FILE" '付録BにHuman Review Evidence対象一致がない'
+assert_line '  human_review_approved: true' "$DESIGN_FILE" '付録BにHuman Review approved条件がない'
+for handoff_design in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+  assert_line '- Handoffには権威ある発行元のimmutable evidence URLとrevisionまたはsignature、stable subject ID、target、verdict、issued_at、およびRunnerの検証結果を含める。Git内の自己申告で代用しない。' "$handoff_design" "Handoffに認証済みHuman Review Evidenceがない: $handoff_design"
+done
+assert_line '- Responsible Human Reviewer、Human Review Evidence' "$ROOT_DIR/patterns/claude-code-development-harness/README.md" 'Development READMEに責任ある人間レビューがない'
+assert_line '6. **2軸Review + Human Review:** `code-reviewer`が正確性・回帰を、`security-reviewer`が入力・権限・秘密情報を独立に確認する。blocking指摘の解消後、責任ある人間Reviewerが固定差分、テスト、設計意図を理解して承認する。' "$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/README.md" 'Lightweight READMEのレビュー完了条件が古い'
+assert_line '7. **Handoff:** 変更概要、変更ファイル、検証コマンドと終了コード、レビュー結果、Human Review Evidence、残課題を最終回答にまとめる。' "$ROOT_DIR/patterns/claude-code-lightweight-feature-harness/README.md" 'Lightweight READMEのHandoff証跡が不足'
+assert_line '6. **2軸Review + Human Review:** `code-reviewer`が正確性と回帰を、`security-reviewer`が脆弱性と権限拡大を独立に確認する。blocking指摘の解消後、責任ある人間Reviewerが固定差分、テスト、設計意図を理解して承認する。' "$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/README.md" 'Micro READMEのレビュー完了条件が古い'
+assert_line '7. **Report:** 根本原因、変更ファイル、RED/GREENを含む検証証跡、レビュー結果、Human Review Evidence、残課題を最終回答にまとめる。' "$ROOT_DIR/patterns/claude-code-micro-bugfix-harness/README.md" 'Micro READMEのReport証跡が不足'
 
 TMP_BASE=${TMPDIR:-/tmp}
 WORK_DIR=$(mktemp -d "$TMP_BASE/doc-consistency.XXXXXX") || exit 1
@@ -108,6 +184,83 @@ IMPLEMENTATION_GATE_SECTION_FILE="$WORK_DIR/implementation-gate-section"
 IMPLEMENTATION_REVIEW_TARGET_FILE="$WORK_DIR/implementation-review-target"
 JIRA_DEVELOPMENT_OUTBOX_FILE="$WORK_DIR/jira-development-outbox.yaml"
 JIRA_INCIDENT_OUTBOX_FILE="$WORK_DIR/jira-incident-outbox.yaml"
+
+evidence_index=0
+for evidence_design in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+  evidence_index=$((evidence_index + 1))
+  committed_example="$WORK_DIR/human-review-committed-$evidence_index.yaml"
+  uncommitted_example="$WORK_DIR/human-review-uncommitted-$evidence_index.yaml"
+  awk '
+    /^### Committed target例$/ { section = 1; next }
+    section && /^```yaml$/ { yaml = 1; next }
+    yaml && /^```$/ { exit }
+    yaml { print }
+  ' "$evidence_design" > "$committed_example"
+  awk '
+    /^### Uncommitted target例$/ { section = 1; next }
+    section && /^```yaml$/ { yaml = 1; next }
+    yaml && /^```$/ { exit }
+    yaml { print }
+  ' "$evidence_design" > "$uncommitted_example"
+  if ! ruby -ryaml -rtime -e '
+    expected_kind = ARGV.shift
+    data = YAML.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], aliases: false)
+    evidence = data.fetch("human_review_evidence")
+    %w[issuer stable_subject_id verdict target issued_at].each do |key|
+      raise "missing #{key}" unless evidence[key].is_a?(String) && !evidence[key].empty? || key == "target" && evidence[key].is_a?(Hash)
+    end
+    raise "verdict must be approved" unless evidence["verdict"] == "approved"
+    raise "stable_subject_id must be opaque" if evidence["stable_subject_id"].match?(/[@[:space:]]/)
+    Time.iso8601(evidence["issued_at"])
+    target = evidence["target"]
+    raise "target kind mismatch" unless target["kind"] == expected_kind
+    oid = /\A[0-9a-f]{40}([0-9a-f]{24})?\z/
+    if expected_kind == "committed"
+      raise "committed target fields invalid" unless target.keys.sort == %w[commit_oid kind] && target["commit_oid"].match?(oid)
+    else
+      required = %w[kind base_oid diff_hash]
+      allowed = required + %w[manifest_hash]
+      raise "uncommitted target fields invalid" unless (required - target.keys).empty? && (target.keys - allowed).empty?
+      raise "base_oid invalid" unless target["base_oid"].match?(oid)
+      raise "diff_hash invalid" unless target["diff_hash"].match?(/\Asha256:[0-9a-f]{64}\z/)
+      if target["manifest_hash"]
+        raise "manifest_hash invalid" unless target["manifest_hash"].match?(/\Asha256:[0-9a-f]{64}\z/)
+      end
+    end
+    url_revision = evidence["evidence_url"].is_a?(String) && evidence["evidence_url"].start_with?("https://") && evidence["revision"].is_a?(String) && !evidence["revision"].empty?
+    signature = evidence["signature"].is_a?(String) && !evidence["signature"].empty?
+    raise "exactly one authentication form required" unless url_revision != signature
+  ' committed "$committed_example"; then
+    fail "Committed Human Review Evidence例のschemaが不正: $evidence_design"
+  fi
+  if ! ruby -ryaml -rtime -e '
+    expected_kind = ARGV.shift
+    data = YAML.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], aliases: false)
+    evidence = data.fetch("human_review_evidence")
+    %w[issuer stable_subject_id verdict target issued_at].each do |key|
+      raise "missing #{key}" unless evidence[key].is_a?(String) && !evidence[key].empty? || key == "target" && evidence[key].is_a?(Hash)
+    end
+    raise "verdict must be approved" unless evidence["verdict"] == "approved"
+    raise "stable_subject_id must be opaque" if evidence["stable_subject_id"].match?(/[@[:space:]]/)
+    Time.iso8601(evidence["issued_at"])
+    target = evidence["target"]
+    raise "target kind mismatch" unless target["kind"] == expected_kind
+    oid = /\A[0-9a-f]{40}([0-9a-f]{24})?\z/
+    required = %w[kind base_oid diff_hash]
+    allowed = required + %w[manifest_hash]
+    raise "uncommitted target fields invalid" unless (required - target.keys).empty? && (target.keys - allowed).empty?
+    raise "base_oid invalid" unless target["base_oid"].match?(oid)
+    raise "diff_hash invalid" unless target["diff_hash"].match?(/\Asha256:[0-9a-f]{64}\z/)
+    if target["manifest_hash"]
+      raise "manifest_hash invalid" unless target["manifest_hash"].match?(/\Asha256:[0-9a-f]{64}\z/)
+    end
+    url_revision = evidence["evidence_url"].is_a?(String) && evidence["evidence_url"].start_with?("https://") && evidence["revision"].is_a?(String) && !evidence["revision"].empty?
+    signature = evidence["signature"].is_a?(String) && !evidence["signature"].empty?
+    raise "exactly one authentication form required" unless url_revision != signature
+  ' uncommitted "$uncommitted_example"; then
+    fail "Uncommitted Human Review Evidence例のschemaが不正: $evidence_design"
+  fi
+done
 
 assert_unique_line '## 6.5 REFACTOR Gate' "$DESIGN_FILE" 'Development REFACTOR節が一意でない'
 assert_unique_line '## 6.1 標準サイクル' "$DESIGN_FILE" 'Development標準サイクル節が一意でない'
