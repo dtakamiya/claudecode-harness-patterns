@@ -41,8 +41,8 @@ evidence:
 action_proposals:
   - action_id: ACT-001
     revision: 1
-    canonical_payload: '{"version":"incident-action/v1","action_id":"ACT-001","revision":1,"target":"対象resource","operation":"秘密値を除いた提案操作","parameters":{},"expected_result":"期待結果","stop_condition":"停止・エスカレーション条件","timeout_seconds":60,"rollback_operation":"秘密値を除いたrollback操作","rollback_parameters":{},"rollback_condition":"rollbackを開始する条件"}'
-    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    canonical_payload: '{"version":"incident-action/v1","action_id":"ACT-001","revision":1,"target":"対象resource","operation":"秘密値を除いた提案操作","parameters":{},"preconditions":{"resource_version":"rv-123"},"expected_result":"期待結果","stop_condition":"停止・エスカレーション条件","timeout_seconds":60,"rollback_operation":"秘密値を除いたrollback操作","rollback_parameters":{},"rollback_preconditions":{"resource_version":"rv-124"},"rollback_condition":"rollbackを開始する条件"}'
+    digest: "sha256:0780746fa7f1556ff7cd42b87feeb7356a0ac27d590f4a1c395b345b7eb6a531"
     timestamp: "2026-01-01T00:01:00Z"
     actor: "role/name"
     role: investigator
@@ -52,6 +52,8 @@ action_proposals:
     target: "対象resource"
     operation: "秘密値を除いた提案操作"
     parameters: {}
+    preconditions:
+      resource_version: rv-123
     expected_result: "期待結果"
     stop_condition: "停止・エスカレーション条件"
     timeout_seconds: 60
@@ -60,13 +62,18 @@ action_proposals:
     rationale: "採用理由"
     rollback_operation: "秘密値を除いたrollback操作"
     rollback_parameters: {}
+    rollback_preconditions:
+      resource_version: rv-124
     rollback_condition: "rollbackを開始する条件"
 approvals:
-  - action_id: ACT-001
+  - approval_id: APR-001
+    action_id: ACT-001
     revision: 1
-    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    digest: "sha256:0780746fa7f1556ff7cd42b87feeb7356a0ac27d590f4a1c395b345b7eb6a531"
     timestamp: "2026-01-01T00:02:00Z"
     actor: "人間の承認者"
+    identity_id: iam:user:service-owner
+    authority_role: service-owner
     role: approver
     session_id: human-session-id
     trace_id: null
@@ -77,12 +84,34 @@ approvals:
     exit_code: 0
     rationale: "承認理由と承認範囲"
     expires_at: "2026-01-01T00:12:00Z"
+  - approval_id: APR-002
+    action_id: ACT-001
+    revision: 1
+    digest: "sha256:0780746fa7f1556ff7cd42b87feeb7356a0ac27d590f4a1c395b345b7eb6a531"
+    timestamp: "2026-01-01T00:02:30Z"
+    actor: "一人目とは異なる人間の承認者"
+    identity_id: iam:user:security-owner
+    authority_role: security-owner
+    role: approver
+    session_id: second-human-session-id
+    trace_id: null
+    span_id: null
+    target: "対象resource"
+    operation: "提案ACT-001 revision 1の承認"
+    result: approved
+    exit_code: 0
+    rationale: "独立した観点での承認理由と承認範囲"
+    expires_at: "2026-01-01T00:12:00Z"
 executions:
   - action_id: ACT-001
     revision: 1
-    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    digest: "sha256:0780746fa7f1556ff7cd42b87feeb7356a0ac27d590f4a1c395b345b7eb6a531"
+    approval_refs:
+      - APR-001
+      - APR-002
     timestamp: "2026-01-01T00:03:00Z"
     actor: "実行担当"
+    identity_id: iam:workload:incident-executor
     role: executor
     session_id: claude-session-id
     trace_id: null
@@ -90,13 +119,15 @@ executions:
     target: "対象resource"
     operation: "秘密値を除いた提案操作"
     parameters: {}
+    preconditions:
+      resource_version: rv-123
     result: "実行結果"
     exit_code: 0
     rationale: "承認参照と実行判断"
 rollbacks:
   - action_id: ACT-001
     revision: 1
-    digest: "sha256:d96df11cbef12fd4b1ba8b949a04a9e21763f9a505f00c0088303054a4125e3e"
+    digest: "sha256:0780746fa7f1556ff7cd42b87feeb7356a0ac27d590f4a1c395b345b7eb6a531"
     timestamp: null
     actor: null
     role: executor
@@ -106,6 +137,8 @@ rollbacks:
     target: "対象resource"
     operation: "秘密値を除いたrollback操作"
     parameters: {}
+    preconditions:
+      resource_version: rv-124
     result: not_executed
     exit_code: null
     rationale: "実行または未実行の理由"

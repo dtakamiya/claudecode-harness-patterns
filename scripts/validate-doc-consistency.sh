@@ -13,6 +13,7 @@ INCIDENT_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/d
 INCIDENT_STATE_TEMPLATE_FILE="$ROOT_DIR/patterns/claude-code-incident-response-harness/templates/incident-state.yaml"
 ROOT_README_FILE="$ROOT_DIR/README.md"
 PATTERNS_README_FILE="$ROOT_DIR/patterns/README.md"
+HUMAN_GATE_POLICY_FILE="$ROOT_DIR/patterns/human-gate-policy.md"
 ERRORS=0
 
 fail() {
@@ -86,7 +87,7 @@ for design_path in "$DESIGN_FILE" "$JIRA_DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE"
   fi
 done
 
-for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE"; do
+for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE" "$HUMAN_GATE_POLICY_FILE"; do
   if [ ! -f "$required_path" ] || [ ! -r "$required_path" ] || [ -L "$required_path" ]; then
     printf '%s\n' "FAIL: 必須文書が通常の読取り可能ファイルではない: $required_path" >&2
     exit 1
@@ -136,7 +137,27 @@ assert_unique_line '### 4.2 Incident Readiness Gate' "$JIRA_DESIGN_FILE" 'Incide
 assert_line '- [Claude Code Jira Ticket Harness](patterns/claude-code-jira-ticket-harness/README.md) — Jiraチケットを安全に取り込み、適切な開発ハーネスへ振り分け、証跡をJiraへ冪等に書き戻すパターン' "$ROOT_README_FILE" 'ルート索引にJira Ticket Harnessがない'
 assert_line 'Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket Harness](claude-code-jira-ticket-harness/README.md)でチケットを正規化し、作業の規模とリスクに応じて既存の4方式へ振り分ける。' "$PATTERNS_README_FILE" '共通適用ガイドにJira Ticket Harnessの案内がない'
 assert_line '- [Claude Code Incident Response Harness](patterns/claude-code-incident-response-harness/README.md) — 本番サービス障害を、明示承認、single-writer、構造化記録、復旧検証で安全に収束させるパターン' "$ROOT_README_FILE" 'ルート索引にIncident Harnessがない'
+assert_line '- [Human Gate Policy](patterns/human-gate-policy.md) — 全ハーネス共通のリスク階層、承認対象、Decision Packet、失効、役割分離を定めるポリシー' "$ROOT_README_FILE" 'ルート索引にHuman Gate Policyがない'
 assert_line '| 主用途 | 原因が特定できる局所バグ | 受入条件が確定した小機能 | 要件・設計を含む開発 | 本番サービス障害の収束 |' "$PATTERNS_README_FILE" '比較表にIncident Harnessの主用途がない'
+assert_line '共通の人間承認ルールは[Human Gate Policy](human-gate-policy.md)を正本とする。' "$PATTERNS_README_FILE" '共通適用ガイドにHuman Gate Policyの案内がない'
+
+for human_gate_heading in '# Human Gate Policy' '## 2. リスク階層' '## 3. 必須ヒューマンゲート' '## 4. Decision Packet' '## 5. 承認の有効性と失効' '## 6. 役割分離と監査' '## 7. 運用評価'; do
+  assert_unique_line "$human_gate_heading" "$HUMAN_GATE_POLICY_FILE" "Human Gate Policyの必須節 '$human_gate_heading' が一意でない"
+done
+
+for human_gate_term in 'Tier 0' 'Tier 1' 'Tier 2' 'Tier 3' 'Tier 4' 'Intent' 'Scope' 'Evidence' 'Risk' 'Recovery' 'fail-closed' 'break-glass' 'commit SHA' digest '承認期限' '二名承認' 'pre-authorization grant' 'private repository' 'grantee/workload identity' 'task/run ID' '明示的なPR作成Intent' '裸のdigestだけを認証根拠にしない。' '条件を一つでも満たさないPR作成はTier 2' '操作分割で降格させない。' 'read-only観測と決定論的検証はTier 0' '設計・実装前のDecision Packet:' '外部反映前のDecision Packet:' '理由付き`N/A`' 'merge先base SHA' ETag 'compare-and-swap' 'lock、lease、対象凍結' '変更作成者、提案者、Executorのいずれとも異なる' 'authority mapping' 'WORMまたはhash chain' '未実装のハーネスでは`break-glass`を禁止する。' 'AI/LLM ReviewerのPASSは人間Approverを代替しない。' 'denyまたは禁止操作を解除しない。' 'immutable intentの同一payload' 'incident-action/v1' 'Manual modeはPoC限定'; do
+  assert_contains "$human_gate_term" "$HUMAN_GATE_POLICY_FILE" "Human Gate Policyに必須語 '$human_gate_term' がない"
+done
+
+for branch_design in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
+  if grep -Fq -- 'ユーザー承認後にfeatureブランチを作成' "$branch_design"; then
+    fail "feature branch作成を一律Human Gateにする旧規則が残っている: $branch_design"
+  fi
+done
+
+for human_gate_design in "$DESIGN_FILE" "$JIRA_DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE" "$INCIDENT_DESIGN_FILE"; do
+  assert_contains 'Human Gate Policy' "$human_gate_design" "設計書からHuman Gate Policyを参照していない: $human_gate_design"
+done
 assert_line '- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。' "$LIGHTWEIGHT_DESIGN_FILE" 'LightweightからIncidentへの昇格案内がない'
 assert_line '- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。' "$MICRO_DESIGN_FILE" 'MicroからIncidentへの昇格案内がない'
 
@@ -146,7 +167,7 @@ done
 
 if ! command -v ruby >/dev/null 2>&1; then
   fail 'Incident状態雛形の構文・階層検査にはRuby標準ライブラリyamlが必要'
-elif ! ruby -ryaml -rjson -rdigest -e '
+elif ! ruby -ryaml -rjson -rdigest -rtime -e '
   data = YAML.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], aliases: false)
   arrays = %w[timeline evidence action_proposals approvals executions rollbacks]
   common = %w[timestamp actor role session_id trace_id span_id target operation result exit_code rationale]
@@ -176,11 +197,13 @@ elif ! ruby -ryaml -rjson -rdigest -e '
       "target" => entry["target"],
       "operation" => entry["operation"],
       "parameters" => entry["parameters"],
+      "preconditions" => entry["preconditions"],
       "expected_result" => entry["expected_result"],
       "stop_condition" => entry["stop_condition"],
       "timeout_seconds" => entry["timeout_seconds"],
       "rollback_operation" => entry["rollback_operation"],
       "rollback_parameters" => entry["rollback_parameters"],
+      "rollback_preconditions" => entry["rollback_preconditions"],
       "rollback_condition" => entry["rollback_condition"]
     })
     raise "proposal canonical_payload mismatch" unless entry["canonical_payload"] == canonical
@@ -195,10 +218,42 @@ elif ! ruby -ryaml -rjson -rdigest -e '
       raise "#{name} digest does not bind proposal" unless proposals[key] == entry["digest"]
     end
   end
+  data["approvals"].each do |entry|
+    %w[approval_id identity_id authority_role expires_at].each { |key| raise "approval missing #{key}" unless entry[key].is_a?(String) && !entry[key].empty? }
+    raise "approval role invalid" unless entry["role"] == "approver"
+    raise "approval result invalid" unless entry["result"] == "approved" && entry["exit_code"] == 0
+    raise "approval expiry invalid" unless entry["expires_at"].match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
+  end
+  data["executions"].each do |entry|
+    raise "execution missing identity_id" unless entry["identity_id"].is_a?(String) && !entry["identity_id"].empty?
+    raise "execution missing approval_refs" unless entry["approval_refs"].is_a?(Array) && entry["approval_refs"].length >= 2
+  end
+  approval_ids = data["approvals"].map { |entry| entry["approval_id"] }
+  raise "approval_id must be unique" unless approval_ids.uniq.length == approval_ids.length
+  proposals.each_key do |key|
+    approvals = data["approvals"].select { |entry| [entry["action_id"], entry["revision"]] == key }
+    approver_ids = approvals.map { |entry| entry["identity_id"] }.uniq
+    authority_roles = approvals.map { |entry| entry["authority_role"] }.uniq
+    executor_ids = data["executions"].select { |entry| [entry["action_id"], entry["revision"]] == key }.map { |entry| entry["identity_id"] }.uniq
+    raise "proposal must have two distinct human approver identities" unless approver_ids.length >= 2
+    raise "proposal must have two distinct authority roles" unless authority_roles.length >= 2
+    raise "approver and executor identities must be separate" unless (approver_ids & executor_ids).empty?
+    executions = data["executions"].select { |entry| [entry["action_id"], entry["revision"]] == key }
+    approved_ids = approvals.map { |entry| entry["approval_id"] }.sort
+    executions.each do |execution|
+      raise "execution approval_refs mismatch" unless execution["approval_refs"].sort == approved_ids
+      executed_at = Time.parse(execution["timestamp"])
+      approvals.each do |approval|
+        approved_at = Time.parse(approval["timestamp"])
+        expires_at = Time.parse(approval["expires_at"])
+        raise "approval time ordering invalid" unless approved_at < expires_at && executed_at <= expires_at
+      end
+    end
+  end
   proposal_entries = data["action_proposals"].each_with_object({}) { |entry, index| index[[entry["action_id"], entry["revision"]]] = entry }
   data["executions"].each do |entry|
     proposal = proposal_entries[[entry["action_id"], entry["revision"]]]
-    %w[target operation parameters].each do |field|
+    %w[target operation parameters preconditions].each do |field|
       raise "execution #{field} differs from approved proposal" unless entry[field] == proposal[field]
     end
   end
@@ -207,12 +262,16 @@ elif ! ruby -ryaml -rjson -rdigest -e '
     raise "rollback target differs from approved proposal" unless entry["target"] == proposal["target"]
     raise "rollback operation differs from approved proposal" unless entry["operation"] == proposal["rollback_operation"]
     raise "rollback parameters differ from approved proposal" unless entry["parameters"] == proposal["rollback_parameters"]
+    raise "rollback preconditions differ from approved proposal" unless entry["preconditions"] == proposal["rollback_preconditions"]
   end
 ' "$INCIDENT_STATE_TEMPLATE_FILE"; then
   fail 'Incident状態雛形のYAML構文、必須階層、entry項目、UTC時刻またはdigestが不正'
 fi
 
 assert_line '進行中の本番障害または緊急の本番操作が必要になった場合は、開発工程を停止し、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。復旧後の恒久修正は新しいDevelopment taskとして再開する。' "$DESIGN_FILE" 'Development設計書にIncidentへの昇格導線がない'
+assert_contains '異なる二人のApprover' "$INCIDENT_DESIGN_FILE" 'Incident設計書に二名承認要件がない'
+assert_contains '`break-glass`は未対応' "$INCIDENT_DESIGN_FILE" 'Incident設計書が未実装break-glassを拒否していない'
+assert_contains '`preconditions`' "$INCIDENT_DESIGN_FILE" 'Incident承認digestが実行前状態を束縛していない'
 
 for jira_term in TicketSnapshot 'Definition of Ready' lease revision stale outbox idempotency_key read_credential write_credential needs_clarification Micro Bugfix Lightweight Feature Development 'Incident Response'; do
   assert_contains "$jira_term" "$JIRA_DESIGN_FILE" "Jira設計書に必須語 '$jira_term' がない"
