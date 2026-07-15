@@ -33,7 +33,7 @@ User
 | Reproduce | 回帰テストを先に追加して実行 | テストが期待した理由で失敗（RED） |
 | Fix | 根本原因への最小差分を実装 | 回帰テストが成功（GREEN_CONFIRMATION） |
 | Verify | 関連test、typecheck/lint/build、必要ならUI preview | 必須コマンドが終了コード0 |
-| 2軸Review | 正確性とセキュリティを独立評価 | blocking指摘が0件 |
+| 2軸Review | 正確性とセキュリティを独立評価 | blocking指摘が0件、Human Review Evidenceがvalid、target一致、verdictがapproved |
 | Report | 原因、差分、証跡、レビュー、残課題を報告 | 必須項目が存在 |
 
 ファイル数は目安であり、リスクと波及範囲が小さいことを優先して適用を判断する。

@@ -34,7 +34,7 @@ User
 | Micro Plan | 対象ファイル、RED、最小実装、検証を最大5項目にする | 各受入条件に検証方法がある |
 | TDD | RED → GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREENを小さく反復 | POST_REFACTOR_GREENを確認済み |
 | Verify | test、typecheck/lint/build、UIを検証 | 必須コマンドが終了コード0 |
-| 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件 |
+| 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件、Human Review Evidenceがvalid、target一致、verdictがapproved |
 | Handoff | 差分と証跡を最終回答へ記録 | 必須項目がすべて存在 |
 
 ### Intakeの最小形式
