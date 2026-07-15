@@ -920,6 +920,8 @@ PHASE-8 ready
 
 # 7. Integration Test方針
 
+進行中の本番障害または緊急の本番操作が必要になった場合は、開発工程を停止し、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。復旧後の恒久修正は新しいDevelopment taskとして再開する。
+
 以下は技術スタックに依存しない規範とし、具体的なフレームワークやテスト基盤はプロジェクトprofileで定義する。
 
 | **項目**       | **方針**                               |

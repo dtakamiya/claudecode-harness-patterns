@@ -18,7 +18,7 @@
 ## 対象外
 
 - Contract Test
-- 本番リリース、デプロイ、運用監視、障害対応の詳細設計
+- 本番リリース、デプロイ、運用監視（進行中の障害対応は[Incident Response Harness](../claude-code-incident-response-harness/README.md)を使う）
 - 小さな単発修正へのフル構成の適用
 - 特定技術スタックへの完全な最適化
 

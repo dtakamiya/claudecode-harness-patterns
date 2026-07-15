@@ -20,7 +20,7 @@
 - 10ファイルを超える見込み、複数セッション、複数担当者への引継ぎが必要
 - 障害対応や、原因と影響範囲がまだ特定できていない難解なバグ
 
-該当する場合は[Claude Code Development Harness](../claude-code-development-harness/README.md)へ昇格します。
+障害対応や本番操作は[Incident Response Harness](../claude-code-incident-response-harness/README.md)へ、それ以外は[Claude Code Development Harness](../claude-code-development-harness/README.md)へ昇格します。
 
 ## 実行フロー
 

@@ -60,6 +60,7 @@ main/master上ではファイルを書き換えない。既存作業を保護し
 - REFACTOR後に新規・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。
 - テストの削除・変更・skip、assertionの弱体化でGREENにしない。
 - `PREPARATORY_REFACTOR`が必要なら実装せず、別Development taskへ昇格する。
+- 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。
 - Verifyではプロジェクト既存のコマンドを使い、コマンド、終了コード、結果要約を残す。失敗を無視するフラグ、テスト削除、型エラー抑制でゲートを通さない。
 - baseline由来の既知の失敗と新規失敗を区別する。新規失敗は完了をブロックする。
 
