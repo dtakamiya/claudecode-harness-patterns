@@ -2,7 +2,7 @@
 
 set -u
 
-ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 DESIGN_FILE="$ROOT_DIR/patterns/claude-code-development-harness/docs/design.md"
 ERRORS=0
 
@@ -146,7 +146,7 @@ for file in "$AGENTS_FILE" "$QUALITY_FILE" "$STATE_FILE" "$DIRECTORY_AGENTS_FILE
   fi
 done
 
-while IFS='|' read -r agent allowed_phases profile; do
+while IFS='|' read -r agent allowed_phases _profile; do
   if [ "$agent" = 'development-orchestrator' ]; then
     continue
   fi
@@ -170,7 +170,7 @@ while IFS= read -r directory_agent; do
   fi
 done < "$DIRECTORY_AGENTS_FILE"
 
-while IFS='|' read -r agent allowed_phases profile; do
+while IFS='|' read -r agent allowed_phases _profile; do
   if ! grep -Fxq -- "$agent" "$DIRECTORY_AGENTS_FILE"; then
     fail "AgentDefinitionのAgent '$agent' が推奨ディレクトリにない"
   fi
