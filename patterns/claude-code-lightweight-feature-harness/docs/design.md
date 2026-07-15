@@ -34,7 +34,7 @@ User
 | Micro Plan | 対象ファイル、RED、最小実装、検証を最大5項目にする | 各受入条件に検証方法がある |
 | TDD | RED → GREEN_CONFIRMATION → REFACTOR → POST_REFACTOR_GREENを小さく反復 | POST_REFACTOR_GREENを確認済み |
 | Verify | test、typecheck/lint/build、UIを検証 | 必須コマンドが終了コード0 |
-| 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件 |
+| 2軸Review | 正確性とセキュリティを別観点で評価 | blocking指摘が0件、Human Review Evidenceがvalid、target一致、verdictがapproved |
 | Handoff | 差分と証跡を最終回答へ記録 | 必須項目がすべて存在 |
 
 ### Intakeの最小形式
@@ -60,6 +60,9 @@ main/master上ではファイルを書き換えない。既存作業を保護し
 - REFACTOR後に新規・関連テストを再実行し、終了コード0の`POST_REFACTOR_GREEN`を確認してからVerifyとレビューへ進む。
 - テストの削除・変更・skip、assertionの弱体化でGREENにしない。
 - `PREPARATORY_REFACTOR`が必要なら実装せず、別Development taskへ昇格する。
+- コードだけでは復元しにくい判断は[Change Intent Record](../../change-intent-record.md)に従い、Git/version control内の既存成果物へ目的、理由、制約、対象外、テスト参照を短く残す。独自成果物やゲートは増やさない。
+非自明な設計意図の正本はGit/version control内の既存成果物へ置き、PR、issue、外部文書は固定revision、commit SHAまたはimmutable snapshot付きのsource/mirrorとしてのみ参照する。
+- AIの内部思考や完全な会話transcriptは保存しない。
 - 障害対応または本番操作が必要になった場合は、[Incident Response Harness](../../claude-code-incident-response-harness/README.md)へ昇格する。
 - Verifyではプロジェクト既存のコマンドを使い、コマンド、終了コード、結果要約を残す。失敗を無視するフラグ、テスト削除、型エラー抑制でゲートを通さない。
 - baseline由来の既知の失敗と新規失敗を区別する。新規失敗は完了をブロックする。
@@ -106,6 +109,48 @@ UI変更では、通常のtest/typecheckに加えて利用可能なpreview/brows
 |---|---|---|
 | Code Reviewer | 受入条件、正確性、回帰、境界値、テスト品質、不要な複雑性 | blocking / non-blocking、根拠のファイル位置 |
 | Security Reviewer | 入力検証、認可、情報漏えい、command/path injection、依存・権限の拡大 | blocking / non-blocking、攻撃条件と対策 |
+| Human Reviewer | 固定差分、テスト、設計意図を理解して一致を判定 | 認証済みproviderまたはsigned attestationの参照 |
+
+- AI/LLM ReviewerのPASSは補助証拠に限る。変更を理解した人間Reviewerがコード、テスト、設計意図の一致を確認するまで完了としない。
+- Human Review EvidenceはGit内の自己申告を権威として扱わず、authenticated review provider、protected branch approvalまたはtrusted keyによるsigned attestationからread-onlyで取得する。
+- AI/LLM、Implementer、レビュー対象を変更できるworkloadにはHuman Review Evidenceの発行・更新・失効権限またはprovider credentialを与えない。
+- 必須fieldは`issuer`、PIIを複製しないopaqueな`stable_subject_id`、`verdict`、`issued_at`、排他的な`target`、およびimmutable evidence URLと`revision`の組または信頼済み`signature`とする。
+- committed targetは完全な40桁または64桁hexの`commit_oid`だけを持つ。uncommitted targetは完全な40桁または64桁hexの`base_oid`と、canonical diff bytesの`sha256:<64hex>`である`diff_hash`を持ち、必要なら`manifest_hash`も束縛する。両形態のfieldが混在または欠落した証跡は拒否する。
+- canonical diff bytesは信頼済みRunnerが固定`base_oid`と対象manifestから、external diffとtextconvを無効化し、full-index、binaryを含む決定論的なpath順で生成する。対象のtracked、staged、unstaged、意図したuntracked fileをmanifestへ列挙し、同じbytesをReviewerと検証側でhashする。
+- Runnerはprovider APIの認証結果またはsignatureを検証し、issuer、subjectのrole binding、verdict、target、issued_at、evidence revisionを現在対象と照合する。取得不能、形式不正、不一致、未認証はfail-closedとする。
+- blocking修正または対象変更時は旧attestation本体を変更せずappend-onlyの失効eventを記録し、新対象に束縛されたHuman Review Evidenceを権威ある発行元から再発行する。
+- Human Review Evidenceは品質上の完了条件であり、操作を許可するHuman Gateや新しいgate/stateを追加するものではない。
+
+### Committed target例
+
+```yaml
+human_review_evidence:
+  issuer: github-protected-review
+  stable_subject_id: account:opaque-7f3a
+  verdict: approved
+  target:
+    kind: committed
+    commit_oid: 0123456789abcdef0123456789abcdef01234567
+  issued_at: "2026-07-15T10:00:00+09:00"
+  evidence_url: https://review.example.invalid/attestations/review-123
+  revision: review-123:v3
+```
+
+### Uncommitted target例
+
+```yaml
+human_review_evidence:
+  issuer: organization-review-signing-key
+  stable_subject_id: maintainer:opaque-a19c
+  verdict: approved
+  target:
+    kind: uncommitted
+    base_oid: 0123456789abcdef0123456789abcdef01234567
+    diff_hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    manifest_hash: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  issued_at: "2026-07-15T10:00:00+09:00"
+  signature: sigstore:opaque-signature-bundle-ref
+```
 
 レビュー開始前に対象commit SHA（未コミット差分ならbase SHA、diff hash、変更ファイル一覧）を固定する。Reviewerは固定対象だけをread-onlyで評価し、レビュー中の変更を禁止する。修正はImplementerへ返し、blocking修正後は対象を再固定して関連検証を再実行する。non-blockingは小規模スコープを超えてまで対応せず、残課題へ記録する。
 
@@ -117,6 +162,7 @@ UI変更では、通常のtest/typecheckに加えて利用可能なpreview/brows
 - 変更ファイル一覧
 - `command`、`exit code`、結果要約
 - Code/Security Reviewの結果
+- Handoffには権威ある発行元のimmutable evidence URLとrevisionまたはsignature、stable subject ID、target、verdict、issued_at、およびRunnerの検証結果を含める。Git内の自己申告で代用しない。
 - UI確認結果（該当時）
 - 残課題、未検証事項、昇格判断
 

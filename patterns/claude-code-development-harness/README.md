@@ -26,9 +26,12 @@
 
 - Development Orchestrator、Initializer、Continuation
 - Planner、Generator、Independent Evaluator、Completion Auditor
+- Responsible Human Reviewer、Human Review Evidence
 - Context Builder、context manifest、progress、handoff
 - Deterministic Guardrail、permissions、sandbox、External Harness Runner
 - Progressive Disclosure Skills、Harness Evals
+
+Human Review Evidenceは認証済みreview provider、protected branch approvalまたはsigned attestationからread-onlyで取得し、Git内の自己申告を承認根拠にしない。
 
 ## 設計書
 
@@ -45,3 +48,7 @@
 7. 小さなタスクで一巡させ、Harness Evalsで再開性とゲート動作を確認する。
 
 機能固有の要件・設計・テスト・レビュー・handoffは、原則`docs/features/<feature-id>/`へまとめます。共有規約と横断ADRだけを機能外へ置きます。ハーネス選択は[共通適用ガイド](../README.md)を参照してください。
+
+非自明なAI支援変更は[Change Intent Record](../change-intent-record.md)に従い、目的、理由、制約、対象外、要件・コード・テスト・ADRへの参照を既存成果物へ短く記録します。完全な会話履歴は設計文書の代用にしません。
+
+非自明な設計意図の正本はGit/version control内の既存成果物へ置き、PR、issue、外部文書は固定revision、commit SHAまたはimmutable snapshot付きのsource/mirrorとしてのみ参照する。
