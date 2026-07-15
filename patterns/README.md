@@ -14,6 +14,8 @@
 
 進行中の本番障害、緊急の本番操作、復旧確認と引継ぎが必要な場合は、コード変更規模にかかわらず[Incident Response Harness](claude-code-incident-response-harness/README.md)を使う。復旧後の恒久修正は適切な開発ハーネスへ戻す。
 
+Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket Harness](claude-code-jira-ticket-harness/README.md)でチケットを正規化し、作業の規模とリスクに応じて既存の4方式へ振り分ける。
+
 ## 参考資料
 
 - [Claude CodeのモデルとEffortの選び方](assets/claude-code-model-effort-selection-guide.png)
