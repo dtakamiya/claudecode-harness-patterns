@@ -156,6 +156,15 @@ worktree内のAgentは中央の`progress.yaml`を直接編集できない。agen
 - current参照の内部`phase_definition`・task・input revision・`input_commit`・statusが、それぞれ`progress.yaml`の`current_phase_id`・`current_task`・`revision`・`current_commit`・`current_phase_status`と一致すること。
 - last-completed参照が同一taskの直前Phaseで、statusが`passed`、exit gateがPASSであり、current runの`predecessor_phase_run_id`と一致し、last runの`result_commit`がcurrent runの`input_commit`と一致すること。
 
+### PHASE-0のtask値（設計書 §10.1の補完）
+
+PHASE-0は**タスク一覧そのものを作成する工程**であり、実行時点でtaskが存在しない。設計書はこのケースのtask値を規定していないため、本雛形群はPHASE-0に限り**task値として`PHASE-0`を用いる**（templates/agents/initializer.md「PHASE-0のtask値」が正本）。上記の検証規則へ次の影響があるため、これを理由にrunを拒否しない。
+
+- PHASE-0のagent-runは`docs/status/agent-runs/PHASE-0/<run-id>.yaml`に置かれ、`task: PHASE-0`を持つ。initializerとharness-reviewerの両方が同じ値を使う。
+- PHASE-0実行中の`progress.yaml`は`current_phase_id: PHASE-0`かつ`current_task: PHASE-0`となる。PhaseRunの`phase_definition`とtaskが同値になるが、これは正常であり不一致ではない。
+- **PHASE-0→PHASE-1の遷移では`current_task`が`PHASE-0`から実タスクIDへ変わる。** この境界に限り、last-completed参照へ「同一taskの直前Phase」を要求しない。task値の変化そのものが、初期化から要件定義への正常な遷移である。PHASE-1以降のPhase間では通常どおり同一taskを要求する。
+- PHASE-1以降で`task: PHASE-0`を持つrunを受け取った場合は、規約違反としてfail-closedで拒否する。
+
 `PhaseRun`の`gate_run_refs`は`docs/status/gate-runs/`配下のcanonical pathで列挙させ、同様にtraversal・symlink・ID一致・`phase_run_id`一致を検証する。GateRun・Artifact・TestEvidence・ReviewTargetの`evaluated_commit`はPhaseRunの`result_commit`と一致しなければならない。
 
 **GateRun自体はあなたが直接作成・編集しない。** GateRunは、テスト・静的解析・レビュー等を実行した**信頼済みRunner**がappend-onlyで出力する証跡とする（設計書 §14.2 Compatibleモードの`quality-gate.sh`／`verify-agent-result.sh`、または§8.4のRunnerによるHuman Review Evidence検証と同じ「検証主体と証跡生成主体を分離する」原則）。
