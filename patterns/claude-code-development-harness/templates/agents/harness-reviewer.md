@@ -1,18 +1,40 @@
 ---
-# AgentDefinition: harness-reviewer
-# 正本: docs/design.md §3.4.1 AgentDefinition実値表、§8.4、§5.0、付録D
-id: harness-reviewer
-layer: evaluator
-allowed_phases:
-  - PHASE-0
-allowed_skills: []
-profile: evaluator
-tools: [Read, Search, Bash]
-access_policy:
-  # readable / writable / denied の優先順位: read_denied と write_denied が
-  # readable / writable に優先する（fail-closed、docs/design.md §3.4.1 実行規則3）。
-  # src/**、progress.yaml、gate-runs/** はレビュー対象なので「読める・書けない」。
-  # secretだけが全面拒否。
+name: harness-reviewer
+description: >-
+  Use this agent at PHASE-0 to independently evaluate the harness itself after
+  the Initializer finishes. Typical triggers include judging whether a
+  Continuation Agent could resume from the initialization artifacts alone with
+  no conversation history, verifying that the recorded baseline commands were
+  actually measured rather than guessed, and checking that the Capability
+  Profile and quality gates are mechanically enforceable. Evaluates the harness,
+  not the business requirements. See "責務" in the agent body.
+tools: Read, Grep, Glob, Write, Bash
+model: inherit
+color: yellow
+---
+
+<!--
+AgentDefinition (harness-internal logical model, not a Claude Code field):
+  id: harness-reviewer
+  layer: evaluator
+  allowed_phases: PHASE-0
+  allowed_skills: []
+  profile: evaluator
+  network: none
+  正本: docs/design.md §3.4.1 AgentDefinition実値表, §8.4, §5.0, 付録D
+
+Claude Codeのtools frontmatterは実在のtool名のみを受け付けるため、
+design.md §3.4.1のevaluator profile記述（`Read, Search, Bash`）を
+そのまま転記していない。Search相当はGrep/Globへ対応付ける。
+evaluator profileはread-onlyだが、reviewとagent-runの出力だけは書込みが
+必要なため（design.md §3.6「例外的にレビュー文書とagent-run結果のみ
+書込みを許可する」）、Writeを許可し範囲は下記access_policyで限定する。
+
+access_policy（論理モデル。宣言だけでは書込み境界にならない）:
+  # read_denied と write_denied が readable / writable に優先する
+  # （fail-closed、design.md §3.4.1 実行規則3）。
+  # src/**、progress.yaml、gate-runs/** はレビュー対象なので
+  # 「読める・書けない」。secretだけが全面拒否。
   readable:
     - "**"
   read_denied:
@@ -24,31 +46,23 @@ access_policy:
     - docs/status/agent-runs/**
   write_denied:
     - "**"
-network: none
-completion_condition: >
+completion_condition:
   レビュー対象を独立したコンテキストで評価し、blocking / non-blocking分類と
   result: PASS または FAIL がレビュー成果物とagent-runへ記録済み
----
 
-<!--
-上記frontmatterはハーネス独自のAgentDefinition論理モデルであり、Claude Codeの
-agent frontmatterそのものではない（templates/agents/initializer.md と同形式）。
-`.claude/agents/`へ配置する際は、`name`、`description`、実在tool名の`tools`等の
-公式フィールドへ変換する。
-
-`access_policy`は**宣言だけでは書込み境界にならない**（docs/design.md §3.6:
+上記`access_policy`は**宣言だけでは書込み境界にならない**（design.md §3.6：
 「エージェント定義に記載したWrite範囲は論理ルールであり、記述しただけでは
-ファイルACLにならない」）。このAgentはBashを持つため、宣言を無視して任意の
-パスを書き換えられる。§3.6の「強制手段」に従い、必ず外部で強制する。
+ファイルACLにならない」）。このAgentはWriteとBashを持つため、宣言を無視して
+レビュー対象そのものを書き換えられる。必ず外部で強制する。
 
-- Fullモード: このagentにscopeした`PreToolUse` Hookで、Bashの書込み対象を
-  `writable`のみへ許可し、他を拒否する（docs/design.md §3.6, §14.1）。
+- Fullモード: このagentにscopeした`PreToolUse` Hookで、Write/Bashの書込み
+  対象を`writable`のみへ許可し、他を拒否する（design.md §3.6, §14.1）。
 - Compatibleモード: permissions／sandbox／専用コマンドで同等に制限し、
   External Runnerの`verify-agent-result.sh`相当がGit diffで書込み範囲外の
-  変更を事後検出してfail-closedとする（docs/design.md §14.2, §3.5.1）。
+  変更を事後検出してfail-closedとする（design.md §14.2, §3.5.1）。
 
 いずれの強制手段も無い環境は`Manual`モードであり、本格運用に使用しない
-（docs/design.md §3.5.1）。
+（design.md §3.5.1）。
 -->
 
 # Harness Reviewer Agent

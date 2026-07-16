@@ -1,15 +1,33 @@
 ---
-# AgentDefinition: initializer
-# 正本: docs/design.md §3.4.1 AgentDefinition実値表、§8.1、§5.0
-id: initializer
-layer: generator
-allowed_phases:
-  - PHASE-0
-allowed_skills: []
-profile: generator
-profile_exception: production code write禁止
-tools: [Read, Search, Write, Bash]
-access_policy:
+name: initializer
+description: >-
+  Use this agent at PHASE-0 to bootstrap the Claude Code Development Harness in
+  a repository. Typical triggers include starting harness-driven development in
+  an existing codebase, measuring the actual build/unit-test/integration-test/
+  static-analysis commands instead of guessing them, recording a baseline and
+  Capability Profile, and producing the first handoff so a later Continuation
+  Agent can resume with no conversation history. See "実行手順" in the agent
+  body for the ordered procedure.
+tools: Read, Grep, Glob, Write, Bash
+model: inherit
+color: green
+---
+
+<!--
+AgentDefinition (harness-internal logical model, not a Claude Code field):
+  id: initializer
+  layer: generator
+  allowed_phases: PHASE-0
+  allowed_skills: []
+  profile: generator
+  profile_exception: production code write禁止
+  正本: docs/design.md §3.4.1 AgentDefinition実値表, §8.1, §5.0
+
+Claude Codeのtools frontmatterは実在のtool名のみを受け付けるため、
+design.md §3.4.1のgenerator profile記述（`Read, Search, Write, Bash`）を
+そのまま転記していない。Search相当はGrep/Globへ対応付ける。
+
+access_policy（論理モデル。宣言だけでは書込み境界にならない）:
   readable:
     - "**"
   writable:
@@ -26,10 +44,24 @@ access_policy:
     - src/**
     - lib/**
     - docs/status/progress.yaml
-completion_condition: >
+completion_condition:
   baseline.yaml、progress.yaml初期状態、最初のcontext manifest、
   agent-runディレクトリが揃い、Continuation Agentが会話履歴なしで再開できる
----
+
+上記`access_policy`は**宣言だけでは書込み境界にならない**（design.md §3.6：
+「エージェント定義に記載したWrite範囲は論理ルールであり、記述しただけでは
+ファイルACLにならない」）。このAgentはWriteとBashを持つため、宣言を無視して
+production codeや`progress.yaml`を書き換えられる。必ず外部で強制する。
+
+- Fullモード: このagentにscopeした`PreToolUse` Hookで、Write/Bashの書込み
+  対象を`writable`のみへ許可し、`denied`を拒否する（design.md §3.6, §14.1）。
+- Compatibleモード: permissions／sandbox／専用コマンドで同等に制限し、
+  External Runnerの`verify-agent-result.sh`相当がGit diffで書込み範囲外の
+  変更を事後検出してfail-closedとする（design.md §14.2, §3.5.1）。
+
+いずれの強制手段も無い環境は`Manual`モードであり、本格運用に使用しない
+（design.md §3.5.1）。
+-->
 
 # Initializer Agent
 
