@@ -10,7 +10,7 @@
 |----------|----------------------------------------------------|
 | 対象     | Claude Codeを利用したシステム開発                  |
 | 対象工程 | 要件定義〜実装完了                                 |
-| 版       | Version 1.9 / 2026-07-17（UI検証実行手段・PHASE-8対象解決整合版） |
+| 版       | Version 1.10 / 2026-07-17（ゲート評価時点・横断ゲート整合版） |
 
 # 1. 文書の目的
 
@@ -355,7 +355,7 @@ GateRun        1 ── 0..* TestEvidence
 4. 一つの`AgentRun`は一つの工程・タスクを対象とし、使用Skill、入力revision、成果物、コマンド証跡、結果を§10のagent-run成果物へ記録する。証跡へsecretの値を保存してはならず、コマンド引数・標準出力・標準エラー・成果物パスを保存前にredactionする。secret検出時はrunを`failed`にし、安全な証跡へ置換するまでゲート判定に利用しない。
 5. GeneratorとEvaluatorは別の`AgentRun`とし、Evaluatorは作成対象を直接修正しない。回復可能なゲート不合格時は現在の`PhaseRun`を`blocked`として同じrunをGeneratorへ差し戻す。非回復の不合格時だけ`failed`とし、PhaseRunを再試行する場合は失敗runを`retry_of_run_id`で参照する新規runを作成する。
 6. `progress.yaml`と集約された`PhaseRun`状態の更新者はDevelopment Orchestratorだけとする。AgentとSkillは更新を要求できるが、直接更新しない。
-7. `exit_gate`がPASSし、blocking issueがなく、必須成果物と証跡が揃った場合だけ次の工程を`ready`へ遷移させる。
+7. `exit_gate`がPASSし、blocking issueがなく、必須成果物と証跡が揃った場合だけ次の工程を`ready`へ遷移させる。exit gateは、当該Phaseのintra-phase gateがすべてPASSした場合だけPASSし得る。**本規則は`exit_gate`だけを対象とし、§11の全ゲートを覆わない。** intra-phase gateとcross-cutting gate（`ACCESS_POLICY`、`STATE_REVISION`）の評価時点は§11.0による。
 
 ## 3.5 Deterministic Guardrailアーキテクチャ
 
@@ -1489,6 +1489,8 @@ requested_gate_transition:
 - agent-run成果物は追記専用とし、既存runを書き換えない。
 - 状態ファイルとGitの`current_commit`が一致しない場合は、次工程をブロックする。
 
+**本節の検査が`STATE_REVISION`ゲートの判定内容である**（§11.0 cross-cutting gate）。当該ゲートはPhaseの`exit_gate`ではなく、各`progress.yaml`更新時に反復評価する。判定結果はGateRunとして永続化する。
+
 # 11. 品質ゲート
 
 | **ゲート**          | **主な条件**                                 | **ブロック時の戻り先** |
@@ -1513,6 +1515,45 @@ requested_gate_transition:
 | CODE_REVIEW_TARGET | PHASE-8までのコード、テスト、UI証跡を含むcommit SHA、diff base、変更一覧・成果物ハッシュが固定済み | Orchestrator |
 | CODE_REVIEW | Code ReviewerとSecurity Reviewerのblocking指摘ゼロ、認証済みHuman Review Evidenceのtargetが現在対象と一致し、責任ある人間のverdictがapproved | 実装 |
 | COMPLETION          | 全要件・受入条件・テスト・文書と有効なHuman Review Evidenceが完了 | 該当工程               |
+
+## 11.0 ゲートの種別と評価時点
+
+§3.4.1 実行規則7は「`exit_gate`がPASSし、blocking issueがなく、必須成果物と証跡が揃った場合だけ次の工程を`ready`へ遷移させる」と定めるが、**前表の20ゲートのうち`exit_gate`であるのは11ゲートだけである**。残る9ゲートは実行規則7だけでは評価時点が決まらない。評価時点を定めなければ、そのゲートは一度も評価されないまま完了に到達し得る。本節で全ゲートを3種別へ分類し、評価時点と評価者を定める。
+
+| 種別 | 評価時点 | 該当ゲート |
+|---|---|---|
+| Exit gate | 対象PhaseRunの終了時。PASSで次工程を`ready`へ遷移（実行規則7） | `INITIALIZATION`, `REQUIREMENTS_DRAFT`, `REQUIREMENTS_REVIEW`, `BASIC_DESIGN`, `DETAILED_DESIGN`, `IMPLEMENTATION_PLAN`, `TEST_DESIGN`, `IMPLEMENTATION_EVALUATION`, `CODE_REVIEW_TARGET`, `CODE_REVIEW`, `COMPLETION` |
+| Intra-phase gate | 対象Phase内の定められた段階。exit gateのPASS前提条件 | `REQUIREMENTS_PLAN`, `ARCHITECTURE_PLAN`, `UNIT_TEST_RED`, `UNIT_TEST_GREEN`, `IMPLEMENTATION_REVIEW_TARGET`, `INTEGRATION_TEST`, `UI_VERIFICATION` |
+| Cross-cutting gate | **全AgentRunの前後**。Phaseに紐付かず反復評価する | `ACCESS_POLICY`, `STATE_REVISION` |
+
+### Intra-phase gateの評価順序
+
+各Phase内の順序は既存の規定を正本とする。exit gateは、当該Phaseのintra-phase gateがすべてPASSした場合だけPASSし得る。
+
+| Phase | 順序 | 正本 |
+|---|---|---|
+| PHASE-1 | `REQUIREMENTS_PLAN` → `REQUIREMENTS_DRAFT` | §5 工程表、§8.2 |
+| PHASE-3 | `ARCHITECTURE_PLAN` → `BASIC_DESIGN` | §5 工程表、§8.2 |
+| PHASE-7 | `UNIT_TEST_RED` → `UNIT_TEST_GREEN` → `IMPLEMENTATION_REVIEW_TARGET` → `IMPLEMENTATION_EVALUATION` | §6.6 |
+| PHASE-8 | `INTEGRATION_TEST` → `UI_VERIFICATION` → `CODE_REVIEW_TARGET` | §7.2 |
+
+`UNIT_TEST_RED`と`UNIT_TEST_GREEN`はRED-GREEN-REFACTORの反復ごとに評価する。一つのPhaseRunが複数のGateRunを持つため、`progress.yaml.gates`の値は当該Phaseにおける**最新のGateRun**の結果を表す。個々の評価はGateRunとして`phase_run_id`付きで永続化する（§10.1）。
+
+### Cross-cutting gateの評価
+
+`ACCESS_POLICY`と`STATE_REVISION`はPhaseの`exit_gate`ではなく、**特定工程に属さない**。したがって実行規則7では評価されない。両者は付録BのDefinition of Done条件（`access_policy_enforced`、`state_revision_consistent`、`progress_single_writer_verified`）に含まれるため、完了時点だけで評価すると、違反の検出が全工程を終えた後になる。**両ゲートは違反した個々のrunを止めるためのものであり、事後の集計ではない。**
+
+| ゲート | 評価時点 | 評価者 | 実質的な内容の正本 |
+|---|---|---|---|
+| `ACCESS_POLICY` | **各AgentRunの開始時**。manifest検証と同時 | Context Builder / Orchestrator | §14.3。宣言と実効制御が一致しない場合は実装へ進まない |
+| `STATE_REVISION` | **各`progress.yaml`更新時**。single writer更新の一部 | Orchestrator | §10.2。revision不一致は更新を拒否し、Git SHA不一致は次工程をブロックする |
+
+- `ACCESS_POLICY`のFAILは、当該AgentRunを`queued`から進めない。§14.3の「manifestがない場合、または宣言と実効制御が一致しない場合は実装へ進まない」がこのゲートの判定内容である。
+- `STATE_REVISION`のFAILは、当該更新を拒否する。§10.2の「`expected_previous_revision`が現在値と一致しない場合は更新を拒否」「状態ファイルとGitの`current_commit`が一致しない場合は、次工程をブロックする」がこのゲートの判定内容である。
+- 両ゲートは反復評価するため、`progress.yaml.gates`の値は**最新の評価結果**を表す。過去にPASSしたことは、現在のrunのPASSを意味しない。
+- 両ゲートのGateRunは、対象となったAgentRunまたは更新の`phase_run_id`へ紐付けて永続化する。
+
+**Cross-cutting gateを「完了時に一度だけ確認する項目」として実装してはならない。** §3.5のPreventive／State commitが定める予防制御を、事後確認へ格下げすることになる。
 
 ## 11.1 機械判定とLLM判定の分離
 
@@ -1629,6 +1670,8 @@ RunnerはAgentの自然言語による完了宣言を信用せず、終了コー
 ## 14.3 Context manifest検証
 
 各Generator開始時に、対象タスク、権威ある入力、探索範囲、論理的な読書き範囲、禁止事項がcontext manifestに含まれていることを検証する。さらに、`access_policy`が選択されたenforcement profileへ反映されていることを機械確認する。Fullモードではpermissions、agent tools、PreToolUse Hookを検証し、Compatibleモードではpermissions、sandbox、worktree、専用コマンド、Runnerの変更範囲検査を検証する。manifestがない場合、または宣言と実効制御が一致しない場合は実装へ進まない。
+
+**本節の検証が`ACCESS_POLICY`ゲートの判定内容である**（§11.0 cross-cutting gate）。当該ゲートはPhaseの`exit_gate`ではなく、各AgentRunの開始時に反復評価する。過去にPASSしたことは現在のrunのPASSを意味しない。判定結果はGateRunとして永続化する。
 
 # 15. Definition of Done
 
@@ -2074,6 +2117,43 @@ review:
   production_condition:
     - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
     - 文書整合性検証をCIで継続実行する
+```
+
+# 付録M. Version 1.10変更点
+
+Version 1.10は、PHASE-8雛形の完成後に本書のゲート定義を横断照合して判明した、**ゲート評価時点の欠落**を修正する。§11のゲート表と§10 `progress.yaml`の`gates:`は20件で完全に一致しており、PhaseDefinitionのentry/exit gate連鎖も全て解決する。欠けていたのは各ゲートを**いつ評価するか**の規定である。
+
+## M.1 変更点
+
+- **§11.0 ゲートの種別と評価時点を新設。** §3.4.1 実行規則7は`exit_gate`のPASSで次工程を`ready`にすると定めるが、**§11の20ゲートのうち`exit_gate`は11件だけ**であり、残る9件は評価時点が未定義だった。全ゲートをExit / Intra-phase / Cross-cuttingの3種別へ分類し、評価時点と評価者を定めた。
+- **`ACCESS_POLICY`と`STATE_REVISION`の評価時点を規定。** 両ゲートは深刻な欠落だった。`STATE_REVISION`は本書全体で**ゲート表の1行にしか出現せず**、`ACCESS_POLICY`も表と付録の判定方針を除けば本文に無い。どのPhaseの`exit_gate`でもないため実行規則7では評価されず、**規定どおり実装すると一度も評価されないまま完了に到達し得た**。両者を各AgentRun開始時／各`progress.yaml`更新時に反復評価するcross-cutting gateとして定義した。
+- **§14.3・§10.2とゲートの対応付けを明示。** 両節は`ACCESS_POLICY`／`STATE_REVISION`の判定内容そのものを既に記述していたが、ゲート名を挙げていなかったため、ゲート表の行と実装すべき検証が結び付いていなかった。相互参照を追加した。
+- **§3.4.1 実行規則7へ適用範囲を明記。** 同規則が`exit_gate`だけを対象とし、§11の全ゲートを覆わないことと、exit gateがintra-phase gateのPASSを前提とすることを明示した。
+
+## M.2 影響
+
+- `ACCESS_POLICY`と`STATE_REVISION`は、付録BのDoD条件（`access_policy_enforced`、`state_revision_consistent`、`progress_single_writer_verified`）に含まれるため、従来も完了時点では確認され得た。しかし**両ゲートは違反した個々のrunを止めるためのものであり、事後の集計ではない**。完了時の一括確認へ格下げすると、§3.5のPreventive／State commitが定める予防制御が事後検出になる。強制側（Runner、Hook、Orchestrator）はrun単位の評価として実装する。
+- `progress.yaml.gates`の値は、反復評価するゲートについて最新のGateRunの結果を表す。過去のPASSは現在のrunのPASSを意味しない。
+- ゲート表と`gates:`の20件一致、およびentry/exit gate連鎖の解決性は、文書整合性検証としてCIで継続確認できる（付録K.3 production_condition）。
+
+## M.3 判定
+
+```yaml
+review:
+  target_version: 1.10
+  supported_modes:
+    full: production_candidate
+    compatible_no_hooks: production_candidate
+    manual: poc_only
+  document_consistency: passed
+  runtime_evidence: pending
+  result: PASS_FOR_POC
+  production_condition:
+    - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
+    - 文書整合性検証をCIで継続実行する
+    - §3.6.3の実行時作業領域と§3.6.4の隔離実行環境が、強制側で実装済みであること
+    - §3.6.5のBrowser / Preview供給が、UI変更を扱うプロジェクトで実装済みであること
+    - §11.0のcross-cutting gateが、完了時の一括確認ではなくrun単位で評価されていること
 ```
 
 # 付録L. Version 1.9変更点
