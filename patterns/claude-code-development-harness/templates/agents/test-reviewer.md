@@ -18,7 +18,7 @@ color: yellow
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.6
+出典: Claude Code Development Harness 設計書 Version 1.7
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
@@ -33,23 +33,19 @@ AgentDefinition (harness-internal logical model, not a Claude Code field):
   allowed_skills: []
   profile: evaluator
   network: none
-  正本: 設計書 §3.4.1 AgentDefinition実値表, §5 工程表 PHASE-6, §11, §6, §12, 付録D
+  正本: 設計書 §3.4.1 AgentDefinition実値表, §8.4, §5 工程表 PHASE-6, §11, §6, §12, 付録D
 
-  §8.4 Evaluator層表を`正本`へ挙げていないのは意図的である。
-  同表は本Agentの行を持たない（Requirements Reviewer、Design Reviewer、
-  Plan Reviewer、Implementation Evaluator、Integration Test Reviewer、
-  Code Reviewer、Security Reviewer、Completion Auditor、
-  Harness Reviewerの9行のみ）。§3.4 工程別の適用レベル表の
-  「テスト設計」行はEvaluator列に`Test Reviewer`を挙げ、
-  §5 工程表 PHASE-6は「TDD Generator → Test Reviewer」とするが、
-  いずれも主責務と禁止事項を与えていない。
-  したがって主責務は次から導出する。
+  §8.4 Evaluator層表のTest Reviewer行（主責務「UT/IT観点、正常・異常・境界の
+  網羅、テストデータ、UT/IT振り分けの検査」、禁止「境界を突いていない境界値、
+  理由の無い分類欠落を承認しない」）は設計書 Version 1.7で追加された。
+  本雛形の初版（設計書 1.6時点）は同行が存在しなかったため、主責務を
+  §11・§5・§3.4.1から導出していた。1.7の追加はその導出結果を追認するもので
+  あり、本文の確認項目と齟齬はない。
+  gate条件の正本は引き続き次のとおりとする。
     - §11 `TEST_DESIGN`の条件「UT/IT観点、正常・異常・境界、データが定義」
     - §5 工程表 PHASE-6の終了条件「正常・異常・境界が定義」
     - §3.4.1 PhaseDefinition実値表 PHASE-6のoutputs
       （unit-test-plan, integration-test-plan, test-data）
-    - §3.4.1 AgentDefinition実値表 test-reviewer行（layer: evaluator）
-  （plan-reviewer.mdが§8.3の欠落に対して行った導出と同型の判断）
 
 Claude Codeのtools frontmatterは実在のtool名のみを受け付けるため、
 設計書 §3.4.1のevaluator profile記述（`Read, Search, Bash`）を
@@ -73,7 +69,7 @@ evaluator profileはread-onlyだが、reviewとagent-runの出力だけは書込
 --- 単一Generatorに対する単一gate ---
 
 PHASE-6は2層構成である（設計書 §3.4「工程別の適用レベル」表 テスト設計行:
-Planner=Generator内、Generator=Test Designer / TDD Generator、
+Planner=Generator内、Generator=TDD Generator、
 Evaluator=Test Reviewer、推奨構成=2層）。PHASE-5と異なり評価対象は
 一つのAgentの成果物に閉じる。
 

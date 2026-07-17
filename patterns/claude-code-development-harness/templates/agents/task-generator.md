@@ -17,7 +17,7 @@ color: green
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.6
+出典: Claude Code Development Harness 設計書 Version 1.7
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
@@ -32,16 +32,14 @@ AgentDefinition (harness-internal logical model, not a Claude Code field):
   allowed_skills: []
   profile: generator
   profile_exception: docs/features/<feature-id>/plans のみwrite
-  正本: 設計書 §3.4.1 AgentDefinition実値表, §5.4, §11, §12
+  正本: 設計書 §3.4.1 AgentDefinition実値表, §8.3, §5.4, §11, §12
 
-  §8.3 Generator層表を`正本`へ挙げていないのは意図的である。
-  同表は本Agentの行を持たない（Requirements Analyst、Architect、
-  Detailed Designer、TDD Generator、Integration Test Engineer、
-  UI Verifierの6行のみ）。§8.2 Planner層表にImplementation Plannerの
-  行はあるが、そのGenerator対の記述は§5 工程表の
-  「Planner → Task Generator → Plan Reviewer」と
-  §3.4.1 AgentDefinition実値表のtask-generator行に依存する。
-  主責務は§5.4（タスクの構成要素）と§11（IMPLEMENTATION_PLANの条件）から導く。
+  §8.3 Generator層表のTask Generator行（主責務「Plannerの分解を自己完結した
+  タスク文書へ展開し、UT/IT IDと受入条件を写像」、禁止「分解・依存・実行順を
+  再決定せず、テストケースを設計しない」）は設計書 Version 1.7で追加された。
+  本雛形の初版（設計書 1.6時点）は同行が存在しなかったため、主責務を
+  §5.4（タスクの構成要素）と§11（IMPLEMENTATION_PLANの条件）から導出していた。
+  1.7の追加はその導出結果を追認するものであり、本文と齟齬はない。
 
 Claude Codeのtools frontmatterは実在のtool名のみを受け付けるため、
 設計書 §3.4.1のgenerator profile記述（`Read, Search, Write, Bash`）を
