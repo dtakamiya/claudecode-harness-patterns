@@ -128,6 +128,7 @@ completion_condition:
 schema_version: 1
 task: TASK-004
 phase: tdd_implementation
+input_revision: <current progress.yaml.revision>
 
 context:
   authoritative_inputs:

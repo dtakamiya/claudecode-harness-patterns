@@ -75,7 +75,8 @@ Plan Reviewerが`IMPLEMENTATION_PLAN`として一括で判定する
 gate判定ではなく、PHASE-5内の進捗として扱う。
 
 access_policy（論理モデル。宣言だけでは書込み境界にならない）:
-  # write_denied が writable に優先する（fail-closed、設計書 §3.4.1 実行規則3）。
+  # 最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する
+  # （fail-closed、設計書 §3.4.1 実行規則3）。
   # readableはmanifestのauthoritative_inputs / discovery_rootsで
   # さらに絞られる。ここは上限を示す。
   readable:

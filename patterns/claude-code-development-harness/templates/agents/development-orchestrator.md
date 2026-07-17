@@ -123,10 +123,13 @@ Development Orchestrator（あなた）
 
   | run種別 | 規則 |
   |---|---|
-  | Generator | PhaseRunの`input_commit`から開始し、`result_commit`を生成する。成果物を伴うGeneratorのrunで`input_commit == result_commit`なら、変更が未コミットか成果物が無いことを意味するため**拒否する** |
-  | Evaluator / Auditor | 固定review targetをreadするだけで新たなcommitを作らない。`evaluated_commit`はPhaseRunの`result_commit`と一致しなければならず、`input_commit`と同一値になり得る。**同一であることを理由に拒否しない** |
+  | Generator | PhaseRunの`input_commit`から開始し、review targetを伴うPhaseでは`evaluation_input_commit`、伴わないPhaseでは`result_commit`を生成する。成果物を伴うrunで入力と生成commitが同じなら拒否する |
+  | Evaluator / Auditor | 固定review targetをreadし、`evaluated_commit`を`PhaseRun.evaluation_input_commit`、`evaluated_code_commit`をtargetのcommit、`evaluation_step_input_commit`を当該stepの入力へ一致させる。Evaluator成果物へ出力commitを自己記載しない |
+  | 信頼済みRunner（Evaluator後） | 当該Evaluatorのreview結果とagent-runだけを追加して`evaluation_output_commit`を作り、コード系列外のcontrol-state GateRunとPhaseRunのstepへ記録する |
 
-- PhaseRunの`result_commit`は、Phaseの成果物・レビュー対象・テスト証跡が実際に評価された対象のcommitであり、更新後は`progress.yaml.current_commit`をこの`result_commit`へ置き換える（設計書 §10.1: GateRun等の`evaluated_commit`はPhaseRunの`result_commit`と一致が必須）。
+- review targetを伴うPhaseでは、`evaluation_input_commit`を評価開始前の固定入力、`result_commit`をEvaluator成果物だけを追加した`evaluation_output_commit`とする。更新後は`progress.yaml.current_commit`をこの最終`result_commit`へ置き換える。
+- `evaluated_code_commit`→`evaluation_input_commit`の差分をtargetとchangesの2パス、Evaluatorごとの`evaluation_step_input_commit`→`evaluation_output_commit`の差分を当該Evaluatorのreviewとagent-runの2パスへ限定する。複数Evaluatorは直前outputを次step inputとし、最終outputをPhaseRunの`result_commit`とする。canonical path、current task/run、create-only、非symlinkを検証し、production codeまたはテストの差分を拒否する。
+- `progress.yaml`、PhaseRun、GateRunはコードcommit系列外のappend-only control-state storeへ保存する。Git実装では別ref / worktreeを使い、その更新でコードHEADを進めない。`progress.yaml.current_commit`はコード成果物系列のHEADだけと照合する。
 - テスト証跡・ゲート結果が実際に記録されていること（自己申告のPASS宣言を信用しない）。
 - `expected_previous_revision`が現在の`revision`と一致すること。一致しない場合は他の書き手が先行しているため更新を拒否し、最新状態から再評価する（設計書 §10.2）。
 
@@ -165,7 +168,7 @@ PHASE-0は**タスク一覧そのものを作成する工程**であり、実行
 - **PHASE-0→PHASE-1の遷移では`current_task`が`PHASE-0`から実タスクIDへ変わる。** この境界に限り、last-completed参照へ「同一taskの直前Phase」を要求しない。task値の変化そのものが、初期化から要件定義への正常な遷移である。PHASE-1以降のPhase間では通常どおり同一taskを要求する。
 - PHASE-1以降で`task: PHASE-0`を持つrunを受け取った場合は、規約違反としてfail-closedで拒否する。
 
-`PhaseRun`の`gate_run_refs`は`docs/status/gate-runs/`配下のcanonical pathで列挙させ、同様にtraversal・symlink・ID一致・`phase_run_id`一致を検証する。GateRun・Artifact・TestEvidence・ReviewTargetの`evaluated_commit`はPhaseRunの`result_commit`と一致しなければならない。
+`PhaseRun`の`gate_run_refs`はcontrol-state store内の`docs/status/gate-runs/`配下のcanonical pathで列挙させ、同様にtraversal・symlink・ID一致・`phase_run_id`一致を検証する。review targetを伴わないPhaseではGateRun等の`evaluated_commit`をPhaseRunの`result_commit`へ一致させる。伴うPhaseでは`evaluated_commit`を`evaluation_input_commit`へ一致させ、各Evaluator GateRunのstep input/outputを連鎖させ、末尾の`evaluation_output_commit`をPhaseRunの`result_commit`へ一致させる。
 
 **GateRun自体はあなたが直接作成・編集しない。** GateRunは、テスト・静的解析・レビュー等を実行した**信頼済みRunner**がappend-onlyで出力する証跡とする（設計書 §14.2 Compatibleモードの`quality-gate.sh`／`verify-agent-result.sh`、または§8.4のRunnerによるHuman Review Evidence検証と同じ「検証主体と証跡生成主体を分離する」原則）。
 

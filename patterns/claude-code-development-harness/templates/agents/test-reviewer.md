@@ -413,7 +413,7 @@ secret_detected: false
 result: PASS | FAIL
 review_result_ref: docs/features/<feature-id>/reviews/<review>.yaml
 requested_gate_transition:
-  gate_definition: TEST_DESIGN
+  gate: TEST_DESIGN
   from: in_progress
   to: passed | failed
 ```

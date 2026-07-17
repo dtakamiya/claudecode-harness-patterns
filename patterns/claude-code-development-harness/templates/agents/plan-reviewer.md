@@ -72,7 +72,7 @@ PHASE-1やPHASE-3と異なり、Planner段の中間gate
 振り分けるのは本Agentの責務とする（本文「戻り先の判定」参照）。
 
 access_policy（論理モデル。宣言だけでは書込み境界にならない）:
-  # read_denied と write_denied が readable / writable に優先する
+  # 最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する
   # （fail-closed、設計書 §3.4.1 実行規則3）。
   # 計画とタスク文書はレビュー対象なので「読める・書けない」。
   readable:
@@ -359,7 +359,7 @@ secret_detected: false
 result: PASS | FAIL
 review_result_ref: docs/features/<feature-id>/reviews/<review>.yaml
 requested_gate_transition:
-  gate_definition: IMPLEMENTATION_PLAN
+  gate: IMPLEMENTATION_PLAN
   from: in_progress
   to: passed | failed
 ```

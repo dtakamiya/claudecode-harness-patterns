@@ -20,6 +20,8 @@ TDD_SKILL_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/ski
 TDD_SKILL_AGENT_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/agents/openai.yaml"
 TDD_UNIT_POLICY_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/references/unit-test-policy.md"
 TDD_INTEGRATION_POLICY_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/references/integration-test-policy.md"
+DEVELOPMENT_README_FILE="$ROOT_DIR/patterns/claude-code-development-harness/README.md"
+DEVELOPMENT_AGENTS_DIR="$ROOT_DIR/patterns/claude-code-development-harness/templates/agents"
 ERRORS=0
 
 fail() {
@@ -129,6 +131,105 @@ assert_line '5. Bind Integration Test evidence to the PHASE-8 result commit that
 assert_line '3. If test-support configuration changes, require a new independent audit before execution and exclude all pre-audit results from `INTEGRATION_TEST` gate evidence.' "$TDD_INTEGRATION_POLICY_FILE" 'Integration Test Policyにテスト支援設定変更時の再監査がない'
 assert_line '  display_name: "TDD Development"' "$TDD_SKILL_AGENT_FILE" 'TDD Development Skillのdisplay_nameが不正'
 assert_contains '$tdd-development' "$TDD_SKILL_AGENT_FILE" 'TDD Development Skillのdefault promptにSkill名がない'
+
+assert_contains '`integration_test_engineer_write_allowlist`' "$DESIGN_FILE" 'Integration Test Engineerのcanonical write allowlistが設計書にない'
+assert_line '| integration-test-engineer | generator | PHASE-8 | tdd-development@1 | generator / `integration_test_engineer_write_allowlist`のみwrite |' "$DESIGN_FILE" 'AgentDefinitionがIntegration Test Engineerのcanonical write allowlistを参照していない'
+assert_line '| Integration Test Engineer | `integration_test_engineer_write_allowlist` | test/container限定、ローカルスタブのみ | permissions＋接続先allowlist＋write allowlist検証 | 本番環境接続、production code・Unit Test・ビルド・CI・依存定義の変更 |' "$DESIGN_FILE" 'Permission BoundaryがIntegration Test Engineerのcanonical write allowlistと一致しない'
+assert_line '  write_profile: integration_test_engineer_write_allowlist' "$DESIGN_FILE" 'PHASE-8 context manifestがcanonical write allowlistを参照していない'
+assert_line '- `evaluated_code_commit`から`evaluated_commit`までの許可差分は、review targetと`docs/status/changes/<task>.yaml`の正確な2パスだけとする。' "$DESIGN_FILE" 'Evaluator入力checkpointのcommit境界allowlistがない'
+assert_line '- 各`evaluation_step_input_commit`から対応する`evaluation_output_commit`までの許可差分は、当該Evaluatorが新規作成するreview結果とagent-runの正確な2パスだけとする。' "$DESIGN_FILE" 'Evaluator出力checkpointのcommit境界allowlistがない'
+assert_line '  evaluation_input_commit: abc123def456' "$DESIGN_FILE" 'PhaseRun schemaにEvaluator入力checkpointがない'
+assert_line '  evaluation_step_input_commit: abc123def456' "$DESIGN_FILE" 'Evaluator GateRun schemaにstep入力checkpointがない'
+assert_line '  evaluation_output_commit: bcd234efa567' "$DESIGN_FILE" 'Evaluator GateRun schemaに出力checkpointがない'
+assert_contains 'コードcommit系列の外にあるappend-only control-state store' "$DESIGN_FILE" 'control plane記録がコードcommitを進める自己参照を回避していない'
+assert_contains 'Evaluatorごとに一つのstep' "$DESIGN_FILE" '複数Evaluatorの逐次checkpoint契約がない'
+assert_contains '三境界' "$DEVELOPMENT_AGENTS_DIR/implementation-evaluator.md" 'Implementation Evaluatorが三境界契約を説明していない'
+assert_contains 'evaluation_output_commit' "$DEVELOPMENT_AGENTS_DIR/development-orchestrator.md" 'Development OrchestratorがEvaluator出力checkpointを検証しない'
+if ! awk '
+  /gate_definition: IMPLEMENTATION_REVIEW_TARGET/ { in_target = 1 }
+  in_target && /evaluated_code_commit: 890xyz111222/ { found = 1 }
+  in_target && /status: passed/ { exit !found }
+  END { exit !found }
+' "$DESIGN_FILE"; then
+  fail 'IMPLEMENTATION_REVIEW_TARGET GateRun例にevaluated_code_commitがない'
+fi
+assert_line '| Cross-cutting gate | `ACCESS_POLICY`は各AgentRun開始時、`STATE_REVISION`は各`progress.yaml`更新時に反復評価 | `ACCESS_POLICY`, `STATE_REVISION` |' "$DESIGN_FILE" 'cross-cutting gateの評価時点が詳細定義と一致しない'
+assert_line '  document_consistency: failed' "$DESIGN_FILE" 'Version 1.10レビューが既知の文書不整合をpassedと誤記している'
+assert_line '  known_document_consistency_failures:' "$DESIGN_FILE" 'Version 1.10レビューに既知の文書不整合が記録されていない'
+
+assert_line '- [Integration Test Engineer Agent雛形](templates/agents/integration-test-engineer.md)' "$DEVELOPMENT_README_FILE" 'READMEにIntegration Test Engineer雛形リンクがない'
+assert_line '- [Integration Test Reviewer Agent雛形](templates/agents/integration-test-reviewer.md)' "$DEVELOPMENT_README_FILE" 'READMEにIntegration Test Reviewer雛形リンクがない'
+assert_line '- [UI Verifier Agent雛形](templates/agents/ui-verifier.md)' "$DEVELOPMENT_README_FILE" 'READMEにUI Verifier雛形リンクがない'
+
+for precedence_agent in architect design-reviewer detailed-designer implementation-planner task-generator requirements-analyst requirements-planner requirements-reviewer architecture-planner plan-reviewer; do
+  precedence_file="$DEVELOPMENT_AGENTS_DIR/$precedence_agent.md"
+  assert_contains '最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する' "$precedence_file" "Agent雛形のwrite precedenceが不正: $precedence_agent"
+done
+
+for transition_file in "$DEVELOPMENT_AGENTS_DIR"/*.md; do
+  if ! awk '
+    $0 == "requested_gate_transition:" {
+      if (in_transition && gate_count != 1) invalid = 1
+      in_transition = 1
+      gate_count = 0
+      next
+    }
+    in_transition && /^[^[:space:]]/ {
+      if (gate_count != 1) invalid = 1
+      in_transition = 0
+    }
+    in_transition && /^[[:space:]]+gate_definition:/ { invalid = 1 }
+    in_transition && /^[[:space:]]+gate:/ { gate_count++ }
+    END {
+      if (in_transition && gate_count != 1) invalid = 1
+      exit invalid
+    }
+  ' "$transition_file"; then
+    fail "requested_gate_transition schemaが不正: $transition_file"
+  fi
+done
+
+assert_line 'input_revision: <current progress.yaml.revision>' "$DEVELOPMENT_AGENTS_DIR/context-builder.md" 'context manifestテンプレートにinput_revisionがない'
+assert_contains 'Use this agent only when resuming work at PHASE-7' "$DEVELOPMENT_AGENTS_DIR/continuation.md" 'ContinuationのdescriptionがPHASE-7限定でない'
+assert_line 'tools: Read, Grep, Glob, Write' "$DEVELOPMENT_AGENTS_DIR/continuation.md" 'ContinuationがBashを持つかtoolsが不正'
+assert_contains 'docs/status/agent-runs/<current-task>/<new-run-id>.yaml' "$DEVELOPMENT_AGENTS_DIR/continuation.md" 'Continuationのagent-run write範囲がcurrent task/run一点に限定されていない'
+assert_contains '既存ファイルへのWriteを拒否する（create-only）' "$DEVELOPMENT_AGENTS_DIR/continuation.md" 'Continuationのagent-runがcreate-onlyでない'
+assert_contains '一つの作業単位を選定し、TDD Generatorへの次アクション' "$DEVELOPMENT_AGENTS_DIR/continuation.md" 'Continuationの完了条件が制御層の責務と一致しない'
+assert_contains 'test_support_configuration_changed:' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md" 'Integration Test Engineerのagent-runにテスト支援設定変更宣言がない'
+assert_contains 'independent_reaudit_status:' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md" 'Integration Test Engineerのagent-runに独立再監査statusがない'
+assert_contains '独立再監査がPASSするまでITを実行しない' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md" 'Integration Test Engineerの実行手順に再監査停止条件がない'
+assert_contains 'raw logを作成しない' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md" 'Integration Test Engineerがstdout/stderr captureを信頼済みRunnerへ移管していない'
+if grep -Fq '<run-id>.stdout.redacted.log' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md" || grep -Fq '<run-id>.stderr.redacted.log' "$DEVELOPMENT_AGENTS_DIR/integration-test-engineer.md"; then
+  fail 'Integration Test Engineerがallowlist外のローカルlogを書き込むschemaを持つ'
+fi
+
+if awk '
+  previous ~ /^>/ && $0 == "" { quoted_then_blank = 1; next }
+  quoted_then_blank && /^>/ { exit 1 }
+  { quoted_then_blank = 0; previous = $0 }
+' "$DEVELOPMENT_AGENTS_DIR/implementation-evaluator.md"; then
+  :
+else
+  fail 'Implementation EvaluatorにMD028違反の連続blockquote間空行がある'
+fi
+if ! awk '
+  /^```[^`]+$/ { in_fence = 1; next }
+  /^```$/ {
+    if (!in_fence) error = 1
+    in_fence = 0
+  }
+  END { exit (error || in_fence) }
+' "$DEVELOPMENT_AGENTS_DIR/tdd-generator.md"; then
+  fail 'TDD Generatorにlanguage未指定のopening code fenceがある'
+fi
+if ! awk '
+  /^## 標準サイクル/ { section = 1; next }
+  section && /^```text$/ { found = 1; exit }
+  section && /^```$/ { exit 1 }
+  END { exit !found }
+' "$DEVELOPMENT_AGENTS_DIR/tdd-generator.md"; then
+  fail 'TDD Generatorの標準サイクルcode fenceにtext languageがない'
+fi
 
 assert_line '- [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約' "$ROOT_README_FILE" 'ルート索引にChange Intent Recordがない'
 assert_line '- [AI生成コードの設計意図トレーサビリティ調査](research/ai-generated-code-design-intent-traceability.md) — 長期保守上のリスク、限定条件、反証、実務上の対策を一次資料から整理' "$ROOT_README_FILE" 'ルート索引に設計意図トレーサビリティ調査がない'

@@ -576,7 +576,7 @@ source_code_modified: false
 open_questions: []
 result: PASS | FAIL | NOT_VERIFIED
 requested_gate_transition:
-  gate_definition: UI_VERIFICATION
+  gate: UI_VERIFICATION
   from: in_progress
   to: passed | failed
 ```

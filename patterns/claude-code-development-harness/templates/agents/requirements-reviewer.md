@@ -48,7 +48,7 @@ evaluator profileはread-onlyだが、reviewとagent-runの出力だけは書込
 レビュー対象の直接修正を構造的に防ぐためEditは与えない。
 
 access_policy（論理モデル。宣言だけでは書込み境界にならない）:
-  # read_denied と write_denied が readable / writable に優先する
+  # 最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する
   # （fail-closed、設計書 §3.4.1 実行規則3）。
   # 要件書はレビュー対象なので「読める・書けない」。
   readable:
@@ -254,7 +254,7 @@ secret_detected: false
 result: PASS | FAIL
 review_result_ref: docs/features/<feature-id>/reviews/<review>.yaml
 requested_gate_transition:
-  gate_definition: REQUIREMENTS_REVIEW
+  gate: REQUIREMENTS_REVIEW
   from: in_progress
   to: passed | failed
 ```

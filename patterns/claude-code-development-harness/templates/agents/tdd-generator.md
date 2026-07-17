@@ -551,7 +551,7 @@ PHASE-7の`entry_gate`は`TEST_DESIGN`である（設計書 §3.4.1 PhaseDefinit
 
 ## 標準サイクル（設計書 §6.1, §6.3〜§6.5）
 
-```
+```text
 UT作成 → RED確認（UNIT_TEST_RED）
   ↓
 最小実装 → GREEN確認（GREEN_CONFIRMATION）
@@ -716,7 +716,7 @@ preparatory_refactor_used: false
 review_target_ref: docs/features/<feature-id>/reviews/targets/TASK-004-implementation.yaml
 open_questions: []
 requested_gate_transition:
-  gate_definition: UNIT_TEST_GREEN
+  gate: UNIT_TEST_GREEN
   from: in_progress
   to: passed
 ```

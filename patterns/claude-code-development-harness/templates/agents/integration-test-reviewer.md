@@ -656,7 +656,7 @@ secret_detected: false
 result: PASS | FAIL
 review_result_ref: docs/features/<feature-id>/reviews/<review>.yaml
 requested_gate_transition:
-  gate_definition: INTEGRATION_TEST
+  gate: INTEGRATION_TEST
   from: in_progress
   to: passed | failed
 ```

@@ -41,7 +41,8 @@ planner profileは「Network原則なし」であり、Bashを含まないため
 `disallowedTools: Bash`とする。
 
 access_policy（論理モデル。宣言だけでは書込み境界にならない）:
-  # write_denied が writable に優先する（fail-closed、設計書 §3.4.1 実行規則3）。
+  # 最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する
+  # （fail-closed、設計書 §3.4.1 実行規則3）。
   # readableはmanifestのauthoritative_inputs / discovery_rootsで
   # さらに絞られる。ここは上限を示す。
   readable:
@@ -271,7 +272,7 @@ open_questions:
   - id: QUESTION-001
     blocking: true
 requested_gate_transition:
-  gate_definition: ARCHITECTURE_PLAN
+  gate: ARCHITECTURE_PLAN
   from: in_progress
   to: passed | failed
 ```

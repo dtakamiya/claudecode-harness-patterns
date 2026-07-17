@@ -85,7 +85,8 @@ Plan Reviewerが計画成果物とtask-plansの両方を読んで検出する。
 deny、`tasks/**`はallow）による分離を追加する。
 
 access_policy（論理モデル。宣言だけでは書込み境界にならない）:
-  # write_denied が writable に優先する（fail-closed、設計書 §3.4.1 実行規則3）。
+  # 最も具体的なpathを優先し、同一specificityで競合した場合だけdenyを優先する
+  # （fail-closed、設計書 §3.4.1 実行規則3）。
   # 実効範囲はcontext manifestとの積集合とする（設計書 §3.4.1 実行規則3）。
   readable:
     - docs/**
