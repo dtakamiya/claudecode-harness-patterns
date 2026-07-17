@@ -16,6 +16,10 @@ PATTERNS_README_FILE="$ROOT_DIR/patterns/README.md"
 HUMAN_GATE_POLICY_FILE="$ROOT_DIR/patterns/human-gate-policy.md"
 CHANGE_INTENT_POLICY_FILE="$ROOT_DIR/patterns/change-intent-record.md"
 DESIGN_INTENT_RESEARCH_FILE="$ROOT_DIR/research/ai-generated-code-design-intent-traceability.md"
+TDD_SKILL_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/SKILL.md"
+TDD_SKILL_AGENT_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/agents/openai.yaml"
+TDD_UNIT_POLICY_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/references/unit-test-policy.md"
+TDD_INTEGRATION_POLICY_FILE="$ROOT_DIR/patterns/claude-code-development-harness/templates/skills/tdd-development/references/integration-test-policy.md"
 ERRORS=0
 
 fail() {
@@ -103,12 +107,28 @@ for design_path in "$DESIGN_FILE" "$JIRA_DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE"
   fi
 done
 
-for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE" "$HUMAN_GATE_POLICY_FILE" "$CHANGE_INTENT_POLICY_FILE" "$DESIGN_INTENT_RESEARCH_FILE"; do
+for required_path in "$JIRA_README_FILE" "$INCIDENT_README_FILE" "$INCIDENT_STATE_TEMPLATE_FILE" "$ROOT_README_FILE" "$PATTERNS_README_FILE" "$HUMAN_GATE_POLICY_FILE" "$CHANGE_INTENT_POLICY_FILE" "$DESIGN_INTENT_RESEARCH_FILE" "$TDD_SKILL_FILE" "$TDD_SKILL_AGENT_FILE" "$TDD_UNIT_POLICY_FILE" "$TDD_INTEGRATION_POLICY_FILE"; do
   if [ ! -f "$required_path" ] || [ ! -r "$required_path" ] || [ -L "$required_path" ]; then
     printf '%s\n' "FAIL: 必須文書が通常の読取り可能ファイルではない: $required_path" >&2
     exit 1
   fi
 done
+
+assert_line '- [TDD Development Skill雛形](templates/skills/tdd-development/SKILL.md)' "$ROOT_DIR/patterns/claude-code-development-harness/README.md" 'Development READMEにTDD Development Skill雛形へのリンクがない'
+assert_line 'name: tdd-development' "$TDD_SKILL_FILE" 'TDD Development Skillのnameが不正'
+assert_contains 'PHASE-6:tdd-generator' "$TDD_SKILL_FILE" 'TDD Development SkillにPHASE-6の許可pairがない'
+assert_contains 'PHASE-7:tdd-generator' "$TDD_SKILL_FILE" 'TDD Development SkillにPHASE-7の許可pairがない'
+assert_contains 'PHASE-8:integration-test-engineer' "$TDD_SKILL_FILE" 'TDD Development SkillにPHASE-8の許可pairがない'
+assert_contains 'UNIT_TEST_RED' "$TDD_SKILL_FILE" 'TDD Development SkillにRED gate手順がない'
+assert_contains 'POST_REFACTOR_GREEN' "$TDD_SKILL_FILE" 'TDD Development SkillにREFACTOR後のGREEN手順がない'
+assert_contains 'production codeを変更しない' "$TDD_SKILL_FILE" 'TDD Development SkillにPHASE-8のproduction code保護がない'
+assert_contains 'progress.yamlを直接更新しない' "$TDD_SKILL_FILE" 'TDD Development Skillにsingle-writer規則がない'
+assert_line '- Before any test execution, verify that the command and every transitive executable or configuration it invokes passed the trusted harness audit.' "$TDD_SKILL_FILE" 'TDD Development Skillに推移的な実行対象の監査条件がない'
+assert_line '- Invalidate that audit when build, test-harness, CI, dependency, or invoked configuration changes; block execution and gate evidence until an independent re-audit passes.' "$TDD_SKILL_FILE" 'TDD Development Skillに設定変更時の監査失効条件がない'
+assert_line '5. Bind Integration Test evidence to the PHASE-8 result commit that contains the IT code. Record the PHASE-7 implementation target commit separately as the evaluated production-code baseline, and require the result commit to be its descendant.' "$TDD_SKILL_FILE" 'TDD Development SkillのPHASE-8証跡commit束縛が不正'
+assert_line '3. If test-support configuration changes, require a new independent audit before execution and exclude all pre-audit results from `INTEGRATION_TEST` gate evidence.' "$TDD_INTEGRATION_POLICY_FILE" 'Integration Test Policyにテスト支援設定変更時の再監査がない'
+assert_line '  display_name: "TDD Development"' "$TDD_SKILL_AGENT_FILE" 'TDD Development Skillのdisplay_nameが不正'
+assert_contains '$tdd-development' "$TDD_SKILL_AGENT_FILE" 'TDD Development Skillのdefault promptにSkill名がない'
 
 assert_line '- [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約' "$ROOT_README_FILE" 'ルート索引にChange Intent Recordがない'
 assert_line '- [AI生成コードの設計意図トレーサビリティ調査](research/ai-generated-code-design-intent-traceability.md) — 長期保守上のリスク、限定条件、反証、実務上の対策を一次資料から整理' "$ROOT_README_FILE" 'ルート索引に設計意図トレーサビリティ調査がない'

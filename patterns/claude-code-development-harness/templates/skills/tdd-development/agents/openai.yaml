@@ -1,0 +1,4 @@
+interface:
+  display_name: "TDD Development"
+  short_description: "Run evidence-backed unit TDD and integration tests"
+  default_prompt: "Use $tdd-development to plan or execute the current test phase with gate evidence."
