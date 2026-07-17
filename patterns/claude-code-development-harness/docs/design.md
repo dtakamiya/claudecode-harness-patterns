@@ -10,7 +10,7 @@
 |----------|----------------------------------------------------|
 | 対象     | Claude Codeを利用したシステム開発                  |
 | 対象工程 | 要件定義〜実装完了                                 |
-| 版       | Version 1.7 / 2026-07-17（権限強制規則・Agent表補完版） |
+| 版       | Version 1.8 / 2026-07-17（実行時境界・評価対象実行・commit束縛整合版） |
 
 # 1. 文書の目的
 
@@ -472,6 +472,31 @@ hooks:
 
 Evaluatorは原則read-onlyで評価し、修正はGeneratorへ差し戻す。例外的にレビュー文書とagent-run結果のみ書込みを許可する。`progress.yaml`はOrchestratorだけが更新する。
 
+### 3.6.3 実行時作業領域
+
+本表の論理Write範囲は**成果物の書込み範囲**であり、コマンド実行に伴う副次的な書込みを含まない。Shell範囲を「build/test限定」「test/static analysis」「test/container限定」と定めた行は、実際にはビルドツールが作業ディレクトリへ書込むことを前提とする。`./gradlew test`は`build/`と`.gradle/`へ、`mvn test`は`target/`へ、`npm test`は`node_modules/.cache`へ書込む。
+
+**論理Write範囲だけを既定denyで強制すると、これらのコマンドは全Agentで実行不能になり、§6.4の`GREEN_CONFIRMATION`と§11の`UNIT_TEST_GREEN`が原理的に成立しない。** 実行時作業領域は、成果物のwrite scopeとは別カテゴリとして扱う。
+
+- 実行時作業領域は**リポジトリ外の使い捨て領域**（sandbox内のtmpfs、コンテナ、scratch、使い捨てworktree）とし、canonical pathがリポジトリルート外へ解決されることを条件に書込みを許可する。これは論理Write範囲の拡張ではない。
+- リポジトリ内へビルド出力を書くツール構成では、**出力先をリポジトリ外へ向ける設定を強制側が与える**。与えられない場合、当該Agentはそのコマンドを実行せず、Runnerが自らの権限で実行して結果を証跡として渡す。
+- **追跡対象ファイル、レビュー対象コード、`docs/**`、`.claude/**`への書込みは、実行時作業領域を理由に許可しない。** ビルドツールがこれらを書換える構成は、§3.6.1の既定denyで遮断する。
+- 実行時作業領域はrun終了時に破棄し、次のrunへ状態を持ち越さない。持ち越すとテスト結果が前のrunに依存し、証跡がcommitへ束縛されなくなる。
+
+Evaluatorがテストを再実行する構成では、この領域が無ければ再実行を要求してはならない。再実行できない場合の扱いは§11.1に従い、`residual_risks`へ記録してOrchestratorへ機械的検証を要求する。**テスト弱体化の検出は差分の読解であり、再実行に依存しない**（§6.4、§8.4）。
+
+### 3.6.4 評価対象コードの実行
+
+Agentが実行するテストは、**そのAgentが評価しようとしている未信頼の変更そのもの**である。テストコード、ビルドスクリプト、プラグイン、依存は任意コードを実行でき、秘密情報の読取り、外部送信、ファイル改変に到達し得る。**悪意ある変更を検出するために実行したコマンドが、その悪意ある変更を実行する。**
+
+§3.6.2のコマンド名allowlistはこれを防げない。allowlistが照合するのは`./gradlew`や`npm`という**入口の名前**であり、その先で何が動くかを見ていないためである。したがって評価対象コードを実行するAgentには、次を必須とする。
+
+- allowlistへ登録するコマンドは§16-2の監査（推移的な呼出先まで確認し、外部通信、secret参照、危険操作、対象外書込みがないこと）を経たものに限る。**確認できないコマンドは実行しない**（§16-2）。
+- 実行環境をNetwork遮断・secret非搭載の隔離環境とする。これは強制側の責務であり、Agentの読解やプロンプトの禁止指示で代替しない。
+- **対象の差分がビルド設定、テストハーネス設定、CI設定、依存定義を変更している場合、§16-2の監査済み前提は失効する。** 強制側は当該変更を検出したrunで再監査を要求し、未監査のまま実行させない。
+
+この規定は導入時（§16）だけの手順ではなく、**評価対象コードを実行するすべてのrunへ適用する実行時要件**とする。
+
 ### 3.6.1 Write範囲の解決規則
 
 本表の論理Write範囲はディレクトリ単位で記すが、**prefix一致でそのまま強制してはならない**。強制側（permissions、`PreToolUse` Hook、Runner）は次の規則で解決する。
@@ -488,6 +513,8 @@ Shell範囲を「build/test限定」等と定めた行は、**呼び出し可能
 - **`baseline.yaml`は信頼境界ではない。** §5.0はコマンドを実測して`baseline.yaml`へ記録すると定めるが、これはGit内の編集可能なファイルであり、改ざんされていればAgentは指示に従うだけで任意コマンドの実行に到達し得る。baselineから読んだ文字列をshellへ直接渡さず、**allowlist内のエントリと照合**し、一致しなければfail-closedで拒否する。
 - §3.5 Preventive行が挙げる「危険コマンド拒否、対象外ディレクトリ変更の遮断、Bashリダイレクト先の検査」を`PreToolUse`で適用する。shell metacharacterによる連鎖（`;` `&&` `|` `$()` `` ` `` `>` `>>`）を拒否し、writable外へのリダイレクトを遮断する。**これを行わなければ、Write/Editのwrite scope強制はBash経由で迂回される。**
 - baselineのコマンドがallowlistに無い場合、推測で代替コマンドを実行せず、blockingな未解決事項としてOrchestratorへ差し戻す。
+- **allowlist一致は「安全」を意味しない。** allowlistが照合するのは`./gradlew`や`npm`という入口のコマンド名であり、その先で動くビルドスクリプト、テストコード、プラグイン、依存を見ていない。**推移的な呼出先の安全性はallowlistでは保証できない。** §16-2の監査を経たコマンドだけを登録し（§16-3）、評価対象コードを実行するAgentには§3.6.4を併せて適用する。
+- Shell範囲を持つAgentが実行するコマンドは、作業ディレクトリへ副次的に書込む。この書込み先の扱いは§3.6.3に従う。論理Write範囲だけを既定denyで強制すると、テストコマンドが実行不能になる。
 
 ## 3.7 Progressive Disclosure Skills
 
@@ -1242,7 +1269,16 @@ Orchestratorは`current_phase_run_ref`と`last_completed_phase_run_ref`につい
 
 正常遷移では、直前runの`output_revision`と`result_commit`が次runの`input_revision`と`input_commit`に一致する。再試行では`retry_of_run_id`が同じphase/taskの過去runを指すが、修正を反映した新しい`input_revision`と`input_commit`を使用できる。この場合は、失敗run以後のOrchestrator管理下のrevision/commit履歴が連続し、修正差分の証跡が参照できることを検証する。同じ入力を再実行する場合だけ失敗runの入力revision/commitと一致させる。両参照の欠落・不一致・循環はfail-closedとする。
 
-PhaseRunの`gate_run_refs`にはGateRun IDではなく、リポジトリルートからのcanonical pathを列挙する。Orchestratorは各参照について、パスが`docs/status/gate-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<gate-run-id>`が内部の`gate_run_id`と一致すること、内部の`phase_run_id`が参照元PhaseRunと一致することを検証する。GeneratorのAgentRunはPhaseRunの`input_commit`から開始し、`result_commit`を生成する。成果物を評価するGateRun、Artifact、TestEvidence、ReviewTargetは`evaluated_commit`がPhaseRunの`result_commit`と一致しなければならない。PhaseRunまたはGateRunの参照が一件でも欠落、不一致、解決不能、非一意であればfail-closedで更新を拒否し、各参照を一意に復元できる場合に限り受理する。次の最小schemaで永続化する。
+PhaseRunの`gate_run_refs`にはGateRun IDではなく、リポジトリルートからのcanonical pathを列挙する。Orchestratorは各参照について、パスが`docs/status/gate-runs/`配下に正規化されること、`..`によるtraversalを含まないこと、symlinkではないこと、ファイル名の`<gate-run-id>`が内部の`gate_run_id`と一致すること、内部の`phase_run_id`が参照元PhaseRunと一致することを検証する。GeneratorのAgentRunはPhaseRunの`input_commit`から開始し、`result_commit`を生成する。成果物を評価するGateRun、Artifact、TestEvidence、ReviewTargetは`evaluated_commit`がPhaseRunの`result_commit`と一致しなければならない。
+
+ただし、レビュー対象を固定するPhaseでは`evaluated_commit`と**実際に評価したコードのcommit**が一致しない。§3.8の`commit_sha`はレビュー対象のコードを固定したcheckpoint commitであり、review target成果物と`changes/<task>.yaml`はその後に作られるため、`result_commit`は必ず`commit_sha`の子孫になる。**targetファイルは自身を含むcommitのSHAを自身へ記載できない**（記載した時点でSHAが変わる）ため、この差は構造上不可避である。
+
+したがってreview targetを伴うGateRun、review成果物、evaluator profileのagent-runは次の二つを併記する。
+
+- `evaluated_commit`: PhaseRunの`result_commit`と一致させる。Orchestratorの照合対象はこちらとする。
+- `evaluated_code_commit`: 対応する`review_target.commit_sha`と一致させる。Evaluatorが実際にコードを読み、テストを実行したcommitを表す。
+
+Orchestratorと信頼済みRunnerは、`evaluated_commit`と`evaluated_code_commit`の差分が**review target成果物と`changes/<task>.yaml`だけである**ことを検証する。この差分にproduction codeまたはテストコードが含まれる場合、レビュー対象として固定されていないコードが評価を経ずに次工程へ流れることを意味し、fail-closedで拒否する。`evaluated_code_commit`の欠落、`review_target.commit_sha`との不一致、`evaluated_commit`の非子孫関係も同様にfail-closedとする。PhaseRunまたはGateRunの参照が一件でも欠落、不一致、解決不能、非一意であればfail-closedで更新を拒否し、各参照を一意に復元できる場合に限り受理する。次の最小schemaで永続化する。
 
 ```yaml
 # docs/status/phase-runs/phase-run-TASK-004-008.yaml
@@ -1350,6 +1386,9 @@ preparatory_refactor:
   task: TASK-004
   input_revision: 41
   evaluated_commit: abc123def456
+  evaluated_code_commit: 890xyz111222
+  # review_target.commit_shaと一致。実際にコードを読み、テストを実行したcommit。
+  # evaluated_commitとの差分はreview targetとchanges/<task>.yamlだけでなければならない
   status: passed
   review_result_ref: docs/features/order/reviews/TASK-004-implementation.md
 ```
@@ -1389,6 +1428,11 @@ requested_gate_transition:
   from: in_progress
   to: passed
 ```
+
+上例はgenerator profileのagent-runである。`stdout`／`stderr`のログファイル参照は**generator profileに限る**。§3.6のEvaluatorとCompletion Auditorは「原則Read-only＋レビュー出力のみ許可」であり、write範囲はレビュー成果物とagent-run本体だけである。**別ファイルのログはこの範囲外であり、evaluator profileが上例を踏襲すると越権になる。** 逆にaccess policyを正しく強制すると、Evaluatorはログを書けずrunを完了できない。
+
+- evaluator profileのagent-runは、コマンド出力を`summary`へ要約して記録し、ログファイルを作成しない。要約も保存前にredactionし（§3.4.1 実行規則4）、secret検出時はrunを`failed`とする。
+- 全出力の保全が必要な場合は、信頼済みRunnerが自らの権限で証跡を出力し、agent-runからは参照だけを行う。Agentのwrite範囲を広げて解決しない。
 
 ## 10.2 競合・破損時の扱い
 
@@ -1983,4 +2027,39 @@ review:
   production_condition:
     - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
     - 文書整合性検証をCIで継続実行する
+```
+
+# 付録K. Version 1.8変更点
+
+Version 1.8は、PHASE-7のImplementation Evaluator雛形を作成する過程で判明した、**権限モデルと実行工程の噛み合わせの欠落**を修正する。いずれも雛形側の個別回避ではなく正本へ反映した。
+
+## K.1 変更点
+
+- **§3.6.3 実行時作業領域を新設。** §3.6の論理Write範囲は成果物の書込み範囲であり、コマンド実行に伴う副次的な書込みを含まない。従来はビルド出力先の規定が本書のどこにも存在せず、既定denyを正しく強制するとGradle / Maven / npm等のテストが全Agentで実行不能になり、§6.4の`GREEN_CONFIRMATION`と§11の`UNIT_TEST_GREEN`が原理的に成立しなかった。実行時作業領域をリポジトリ外の使い捨て領域として、成果物のwrite scopeとは別カテゴリで定義した。
+- **§3.6.4 評価対象コードの実行を新設。** Agentが実行するテストは、そのAgentが評価しようとしている未信頼の変更そのものである。§3.6.2のコマンド名allowlistは入口しか照合せず、推移的な呼出先を見ていない。§16-2の監査（従来は導入ステップとしてのみ記述）を、評価対象コードを実行するすべてのrunへ適用する**実行時要件**として明示した。差分がビルド設定・テストハーネス設定・CI設定・依存定義を変更した場合は監査済み前提が失効することを規定した。
+- **§3.6.2へallowlistの限界を明記。** 「allowlist一致は安全を意味しない」ことと、§3.6.3・§3.6.4・§16-2への相互参照を追加した。§3.6.2と§16-2は1000行以上離れており、§3.6.2だけを読むと入口の照合で十分だと誤解し得た。
+- **§10.1のログ出力先をprofile別に規定。** agent-run実例の`stdout`／`stderr`ログファイル参照はgenerator profileに限る。evaluator profileは§3.6で「原則Read-only＋レビュー出力のみ許可」であり、同じschemaを踏襲すると越権になる一方、access policyを正しく強制するとログを書けずrunを完了できないという二律背反があった。evaluator profileはコマンド出力を`summary`へ要約し、全出力の保全が必要な場合は信頼済みRunnerが出力することとした。
+- **§10.1へ`evaluated_code_commit`を追加。** 「評価するGateRunは`evaluated_commit`がPhaseRunの`result_commit`と一致」という規定と、§3.8の「`commit_sha`はreview target成果物を含まない」が両立しなかった。review targetと`changes/<task>.yaml`は`commit_sha`の後に作られるため`result_commit`は必ずその子孫になり、**Evaluatorが実際に読むcommitとschemaが要求する値は構造上一致しない**。両者を併記し、その差分がreview targetと`changes/<task>.yaml`だけであることの検証を必須とした。差分にproduction codeまたはテストコードが含まれる場合は、レビュー対象として固定されていないコードが評価を経ずに次工程へ流れることを意味するためfail-closedとする。
+
+## K.2 影響
+
+- §3.6.3・§3.6.4は既存Agent雛形（TDD Generator、Integration Test Engineer、各Evaluator）にも適用される実行時要件であり、強制側（permissions、sandbox、Hook、External Runner）の実装要件が増える。Agent定義の記述だけでは充足しない。
+- `evaluated_code_commit`はPHASE-7の`IMPLEMENTATION_EVALUATION`とPHASE-9の`CODE_REVIEW`に適用される。review targetを伴わないGateRunは従来どおり`evaluated_commit`のみとする。
+
+## K.3 判定
+
+```yaml
+review:
+  target_version: 1.8
+  supported_modes:
+    full: production_candidate
+    compatible_no_hooks: production_candidate
+    manual: poc_only
+  document_consistency: passed
+  runtime_evidence: pending
+  result: PASS_FOR_POC
+  production_condition:
+    - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
+    - 文書整合性検証をCIで継続実行する
+    - §3.6.3の実行時作業領域と§3.6.4の隔離実行環境が、強制側で実装済みであること
 ```

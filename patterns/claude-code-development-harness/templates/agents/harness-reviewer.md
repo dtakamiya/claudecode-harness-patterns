@@ -14,7 +14,7 @@ color: yellow
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.7
+出典: Claude Code Development Harness 設計書 Version 1.8
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
