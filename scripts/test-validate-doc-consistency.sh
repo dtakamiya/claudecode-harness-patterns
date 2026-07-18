@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -u
+set -eu
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 TMP_BASE=${TMPDIR:-/tmp}
