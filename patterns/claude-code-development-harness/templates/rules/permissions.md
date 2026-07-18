@@ -105,12 +105,20 @@ docs/archive/**
 
 ### 全Agent共通のwrite deny
 
-| パス | 理由 |
-|---|---|
-| `docs/status/progress.yaml` | Orchestratorのsingle writer（設計書 §10） |
-| `docs/status/gate-runs/**` | 信頼済みRunnerだけが書く証跡 |
-| `docs/context/manifests/**` | Context Builderの領分（設計書 §3.3） |
-| `.claude/**` | Agent定義・permissions設定の自己改変を禁止 |
+| パス | 理由 | 例外 |
+|---|---|---|
+| `docs/status/progress.yaml` | Orchestratorのsingle writer（設計書 §10） | Development Orchestratorのみ |
+| `docs/status/gate-runs/**` | 信頼済みRunnerだけが書く証跡 | 信頼済みRunnerのみ（Agentは対象外） |
+| `docs/context/manifests/**` | 他Agentがコンテキスト境界を自己拡張することを禁止（設計書 §3.3） | **Context Builderのみ**（後述） |
+| `.claude/**` | Agent定義・permissions設定の自己改変を禁止 | なし（制御面は§5 security規則で固定） |
+
+> **「全Agent共通のdeny」は、当該パスを唯一の論理Write範囲とするAgentには適用しない。**
+>
+> `docs/context/manifests/**`はContext Builderの論理Write範囲そのものであり（§3の表）、ここをdenyすると同Agentは成果物を一切出力できない。その場合、各AgentRun開始時に必要なmanifestが生成されず、`ACCESS_POLICY`ゲートの開始条件（manifest存在。設計書 §14.3）を**構造的に満たせなくなる。**
+>
+> 強制側は、この行を「Context Builder以外の全Agentに対するdeny」として実装する。§2の最長一致では表現できない**Agent単位の分岐**であるため、agent-scopedな`PreToolUse`（設計書 §3.6のarchitect概念例と同じ`enforce-agent-write-scope.sh <agent>`相当）またはAgentごとのpermissions設定で分岐させる。
+>
+> Context Builder自身にも、§2「証跡は追記専用」と同じ制約は課す。書込みは現在taskのmanifest一点へ限定し、`state-runner`・Bash・handoff・業務成果物・Agent定義・permissions設定・`progress.yaml`の編集を禁止する（§3の表）。
 
 ## 4. Bash allowlist（設計書 §3.6.2）
 
@@ -124,15 +132,22 @@ Shell範囲を「build/test限定」等と定めた行は、**呼び出し可能
 - allowlist内のエントリと**照合**し、一致しなければfail-closedで拒否する。
 - baselineのコマンドがallowlistに無い場合、**推測で代替コマンドを実行せず**、blockingな未解決事項としてOrchestratorへ差し戻す。
 
-### shell metacharacterの遮断
+### コマンド全体を検証する（denylistにしないこと）
 
-`PreToolUse`で次を拒否する（設計書 §3.5 Preventive行）。
+設計書 §3.5 Preventive行は「危険コマンド拒否、対象外ディレクトリ変更の遮断、Bashリダイレクト先の検査」を`PreToolUse`で適用すると定める。**この検査を「危険な文字の列挙」として実装してはならない。**
 
-```text
-;   &&   ||   |   $()   ``   >   >>   <
-```
+> **メタ文字のdenylistは迂回される。** `;` `&&` `|` `$()` `` ` `` `>` `>>`を拒否しても、**改行（LF）、復帰（CR）、単独の`&`**が残る。`npm test` の後に改行を置けば、以降は独立したコマンド行として実行され、allowlist照合もwrite scope強制も通過しない。列挙を増やしても、シェル文法の全体を列挙で覆うことはできない。
 
-- writable外へのリダイレクトを遮断する。
+強制側は次のいずれかで、**コマンド全体を構造として検証する。**
+
+| 方式 | 内容 |
+|---|---|
+| **構造化argv（推奨）** | shellを介さず、`argv[0]`をallowlistと照合して直接execする。シェル文法が一切解釈されないため、連鎖・リダイレクト・展開が構造的に発生しない |
+| **shell AST検証** | shellパーサでコマンド文字列を構文解析し、単一のsimple commandであること、リダイレクト・コマンド置換・サブシェル・バックグラウンド実行を含まないことを**AST上で**確認する |
+
+- **allowlist照合はパース後の`argv[0]`に対して行う。** 生文字列へのprefix一致（「`npm test`で始まるか」）は、後続に何が続いても通過するため照合にならない。
+- リダイレクトを許可する場合、**リダイレクト先をcanonical path化してwritableと照合する**（§2）。判定できない場合は拒否する。
+- 環境変数の代入・上書き（`FOO=bar cmd`）を拒否する。§6の隔離前提を崩し得る。
 - **これを行わなければ、Write/Editのwrite scope強制はBash経由で迂回される。**
 
 ### allowlist一致は「安全」を意味しない
