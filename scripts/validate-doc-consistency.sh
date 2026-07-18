@@ -146,10 +146,22 @@ assert_contains 'Evaluatorごとに一つのstep' "$DESIGN_FILE" '複数Evaluato
 assert_contains '三境界' "$DEVELOPMENT_AGENTS_DIR/implementation-evaluator.md" 'Implementation Evaluatorが三境界契約を説明していない'
 assert_contains 'evaluation_output_commit' "$DEVELOPMENT_AGENTS_DIR/development-orchestrator.md" 'Development OrchestratorがEvaluator出力checkpointを検証しない'
 if ! awk '
-  /gate_definition: IMPLEMENTATION_REVIEW_TARGET/ { in_target = 1 }
-  in_target && /evaluated_code_commit: 890xyz111222/ { found = 1 }
-  in_target && /status: passed/ { exit !found }
-  END { exit !found }
+  function finish_record() {
+    if (is_target && found_commit && found_status) valid = 1
+  }
+  /^- gate_run_id:/ {
+    finish_record()
+    is_target = 0
+    found_commit = 0
+    found_status = 0
+  }
+  $0 == "  gate_definition: IMPLEMENTATION_REVIEW_TARGET" { is_target = 1 }
+  is_target && $0 == "  evaluated_code_commit: 890xyz111222" { found_commit = 1 }
+  is_target && $0 == "  status: passed" { found_status = 1 }
+  END {
+    finish_record()
+    exit !valid
+  }
 ' "$DESIGN_FILE"; then
   fail 'IMPLEMENTATION_REVIEW_TARGET GateRun例にevaluated_code_commitがない'
 fi
