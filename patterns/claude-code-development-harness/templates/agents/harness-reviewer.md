@@ -14,7 +14,7 @@ color: yellow
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.6
+出典: Claude Code Development Harness 設計書 Version 1.10
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
@@ -248,7 +248,7 @@ reviewed_at: <ISO8601>
 
 ## agent-run出力（設計書 §10.1）
 
-**あなた専用の新しいrun**を`docs/status/agent-runs/PHASE-0/<run-id>.yaml`としてatomicに作成する。Initializerのrunファイルへ追記・改変してはならない。§10.2の「agent-run成果物は追記専用とし、既存runを書き換えない」は、agent-runディレクトリに対してrunを追加していく（=既存runは不変）という意味であり、他Agentのrunファイル本文へ書き足すことではない。
+**あなた専用の新しいrun**を`docs/status/agent-runs/PHASE-0/<run-id>.yaml`としてatomicに作成する。設計書 §10.1の保存先は`docs/status/agent-runs/<task>/<run-id>.yaml`であり、PHASE-0はtaskが存在しない工程のためtask値として`PHASE-0`を用いる（templates/agents/initializer.md「PHASE-0のtask値」を参照。設計書に明記のない雛形側の補完規約であり、Initializerと同一の値を使う）。Initializerのrunファイルへ追記・改変してはならない。§10.2の「agent-run成果物は追記専用とし、既存runを書き換えない」は、agent-runディレクトリに対してrunを追加していく（=既存runは不変）という意味であり、他Agentのrunファイル本文へ書き足すことではない。
 
 評価対象であるInitializerのrunは`parent_run_id`で参照する（設計書 §3.4.1「`AgentRun`と`SkillUse`は`parent_run_id`で参照する」）。
 
@@ -258,7 +258,10 @@ run_id: <run-YYYYMMDDThhmmss>
 parent_run_id: <評価対象であるinitializerのrun_id>
 phase_run_id: <対象PhaseRunのID>
 agent: harness-reviewer
-task: <対象task>
+task: PHASE-0
+expected_previous_revision: <progress.yaml.revision>
+  # PHASE-0はtaskが存在しない工程のため、task値として`PHASE-0`を用いる。
+  # Initializerのagent-runおよび保存先ディレクトリと同一の値を使う。
 status: passed | failed
 started_at: <ISO8601>
 finished_at: <ISO8601>
@@ -277,7 +280,7 @@ secret_detected: false
 result: PASS | FAIL
 review_result_ref: docs/features/<feature-id>/reviews/<review>.yaml
 requested_gate_transition:
-  gate_definition: INITIALIZATION
+  gate: INITIALIZATION
   from: in_progress
   to: passed | failed
 ```
