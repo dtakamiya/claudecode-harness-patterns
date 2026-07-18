@@ -145,6 +145,7 @@ assert_contains 'コードcommit系列の外にあるappend-only control-state s
 assert_contains 'Evaluatorごとに一つのstep' "$DESIGN_FILE" '複数Evaluatorの逐次checkpoint契約がない'
 assert_contains '三境界' "$DEVELOPMENT_AGENTS_DIR/implementation-evaluator.md" 'Implementation Evaluatorが三境界契約を説明していない'
 assert_contains 'evaluation_output_commit' "$DEVELOPMENT_AGENTS_DIR/development-orchestrator.md" 'Development OrchestratorがEvaluator出力checkpointを検証しない'
+assert_line 'expected_previous_revision: <progress.yaml.revision>' "$DEVELOPMENT_AGENTS_DIR/harness-reviewer.md" 'Harness Reviewerのagent-run例にexpected_previous_revisionがない'
 if ! awk '
   function finish_record() {
     if (is_target && found_commit && found_status) valid = 1

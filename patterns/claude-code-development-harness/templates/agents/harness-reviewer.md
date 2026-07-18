@@ -259,6 +259,7 @@ parent_run_id: <評価対象であるinitializerのrun_id>
 phase_run_id: <対象PhaseRunのID>
 agent: harness-reviewer
 task: PHASE-0
+expected_previous_revision: <progress.yaml.revision>
   # PHASE-0はtaskが存在しない工程のため、task値として`PHASE-0`を用いる。
   # Initializerのagent-runおよび保存先ディレクトリと同一の値を使う。
 status: passed | failed
