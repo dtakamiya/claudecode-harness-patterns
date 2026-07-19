@@ -48,6 +48,7 @@ PhaseDefinition (正本: 設計書 §3.4.1 PhaseDefinition実値表, §5.1):
 3. Requirements Analystが要求を構造化する。
    - 機能要件と非機能要件に一意なIDを付与する（例: `REQ-F-001`、`REQ-NF-001`）。
    - 各要件に検証可能な受入条件を付与する（例: `AC-001-01`）。
+   - 受入条件はEARSの5文型（Ubiquitous / Event-driven / State-driven / Unwanted behavior / Optional feature）で記述する（設計書 §5.1.1）。
    - 前提、制約、スコープ外、未解決事項を明示する。
 4. 設計・実装上の手段を早期に固定しすぎない（設計書 §5.1）。
 5. 未確定事項は推測せず、質問・課題として記録し、重大なものはblockingとして次工程をブロックする（設計書 §2 推測禁止）。
