@@ -1,0 +1,94 @@
+{
+  "$comment": [
+    "出典: Claude Code Development Harness 設計書 Version 1.10",
+    "https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md",
+    "",
+    "この雛形は templates/settings.json が配布元であり、利用者の .claude/settings.json へコピーして使う。",
+    "",
+    "正本: 設計書 §3.5（Deterministic Guardrail）, §3.6（Permission Boundary）, §14.1（Fullモード）",
+    "",
+    "--- 二層構造であること（重要）---",
+    "",
+    "permissions.deny と hooks は役割が異なる。どちらか一方では境界にならない。",
+    "  permissions.deny … 広いカテゴリの遮断。globで表現できる範囲を担う。",
+    "  hooks            … canonical path正規化、create-only、Bashの構造検証。",
+    "                     permissionsのglobでは表現できない判定を担う。",
+    "設計書 §3.5 は「Hooksだけをサンドボックスやpermissionsの代替にしない」と定める。",
+    "",
+    "--- permissions.deny を先に書く理由 ---",
+    "",
+    "hookは実行される前提のガードであり、hookスクリプトが消えた・実行権が落ちた・",
+    "シェルが無い等で起動しなければ何も守らない。秘密情報や制御面のパスは、",
+    "hookに依存しない permissions.deny 側で先に遮断する。"
+  ],
+
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./docs/archive/**)",
+
+      "Write(./.env)",
+      "Write(./.env.*)",
+      "Write(./secrets/**)",
+
+      "Write(./.claude/**)",
+      "Edit(./.claude/**)",
+
+      "Write(./docs/status/progress.yaml)",
+      "Edit(./docs/status/progress.yaml)",
+
+      "Write(./docs/status/gate-runs/**)",
+      "Edit(./docs/status/gate-runs/**)",
+
+      "Write(./.git/**)",
+      "Edit(./.git/**)"
+    ]
+  },
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-tool-use.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
