@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# scripts/verify-bash-command.sh の回帰テスト。
+# templates/scripts/verify-bash-command.sh の回帰テスト。
 #
 # 正本: 設計書 §3.6.2（Bash allowlist）, templates/rules/permissions.md §4
 #
@@ -11,7 +11,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-TARGET="$ROOT_DIR/scripts/verify-bash-command.sh"
+TARGET="$ROOT_DIR/patterns/claude-code-development-harness/templates/scripts/verify-bash-command.sh"
 TMP_BASE=${TMPDIR:-/tmp}
 WORK_DIR=$(mktemp -d "$TMP_BASE/verify-bash-command-test.XXXXXX") || exit 1
 ALLOWLIST="$WORK_DIR/allowlist"

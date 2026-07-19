@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# scripts/verify-write-scope.sh の回帰テスト。
+# templates/scripts/verify-write-scope.sh の回帰テスト。
 #
 # 正本: 設計書 §3.6.1（Write範囲の解決規則）,
 #       templates/rules/permissions.md §2, §3
@@ -14,7 +14,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-TARGET="$ROOT_DIR/scripts/verify-write-scope.sh"
+TARGET="$ROOT_DIR/patterns/claude-code-development-harness/templates/scripts/verify-write-scope.sh"
 TMP_BASE=${TMPDIR:-/tmp}
 WORK_DIR=$(mktemp -d "$TMP_BASE/verify-write-scope-test.XXXXXX") || exit 1
 REPO="$WORK_DIR/repo"

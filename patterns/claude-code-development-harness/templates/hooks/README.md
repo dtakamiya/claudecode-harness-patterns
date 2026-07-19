@@ -30,6 +30,8 @@ https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/clau
 | `scripts/verify-redirect-target.sh` | リダイレクト先をcanonical path化してwritableと照合 |
 | `scripts/verify-write-scope.sh` | write scope照合、create-only、symlink・traversal拒否 |
 
+表中のパスは**利用者リポジトリでの配置先**であり、雛形の配布元は `templates/scripts/` である。`pre-tool-use.sh` は `${CLAUDE_PROJECT_DIR}/scripts/` を参照するため、この3本を配置しないと**Bash・Write・Editが全てdenyされる**（fail-closed設計のため、設定漏れは「制限なし」ではなく「全拒否」になる）。`.claude/` 配下だけをコピーしても動作しない。
+
 ## 導入
 
 ```bash
@@ -37,7 +39,7 @@ cp templates/hooks/*.sh              .claude/hooks/
 cp templates/settings.json           .claude/settings.json
 cp templates/bash-allowlist          .claude/bash-allowlist
 cp templates/write-scope-policy      .claude/write-scope-policy
-cp scripts/verify-*.sh               scripts/
+cp templates/scripts/verify-*.sh     scripts/
 chmod +x .claude/hooks/*.sh scripts/verify-*.sh
 ```
 

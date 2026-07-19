@@ -13,6 +13,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 HOOK_SRC="$ROOT_DIR/patterns/claude-code-development-harness/templates/hooks/pre-tool-use.sh"
+SCRIPT_SRC="$ROOT_DIR/patterns/claude-code-development-harness/templates/scripts"
 TMP_BASE=${TMPDIR:-/tmp}
 WORK_DIR=$(mktemp -d "$TMP_BASE/pre-tool-use-hook-test.XXXXXX") || exit 1
 PROJECT="$WORK_DIR/project"
@@ -29,9 +30,9 @@ mkdir -p "$PROJECT/.claude/hooks" "$PROJECT/scripts" \
          "$PROJECT/scratch"
 
 cp "$HOOK_SRC" "$PROJECT/.claude/hooks/pre-tool-use.sh"
-cp "$ROOT_DIR/scripts/verify-bash-command.sh" \
-   "$ROOT_DIR/scripts/verify-redirect-target.sh" \
-   "$ROOT_DIR/scripts/verify-write-scope.sh" "$PROJECT/scripts/"
+cp "$SCRIPT_SRC/verify-bash-command.sh" \
+   "$SCRIPT_SRC/verify-redirect-target.sh" \
+   "$SCRIPT_SRC/verify-write-scope.sh" "$PROJECT/scripts/"
 chmod +x "$PROJECT/.claude/hooks/pre-tool-use.sh" "$PROJECT/scripts/"*.sh
 
 printf 'current_task: TASK-004\n' > "$PROJECT/docs/status/progress.yaml"
