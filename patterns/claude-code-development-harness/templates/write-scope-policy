@@ -1,0 +1,74 @@
+# 出典: Claude Code Development Harness 設計書 Version 1.10
+# https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
+#
+# 配布元: templates/write-scope-policy → 利用者の .claude/write-scope-policy へコピーする。
+#
+# 正本: 設計書 §3.6（Permission Boundary）, §3.6.1（Write範囲の解決規則）,
+#       templates/rules/permissions.md §2, §3
+#
+# --- 形式 ---
+#
+#   <mode> <pattern>
+#
+#   mode:
+#     allow             通常の書込みを許可する
+#     allow-create-only 新規作成だけ許可し、既存ファイルへの書込みを拒否する
+#     deny              明示的に拒否する
+#
+#   pattern:
+#     リポジトリルートからの相対パス。末尾 ** は任意深さのprefix照合。
+#     ${CURRENT_TASK} は docs/status/progress.yaml の current_task へ展開される。
+#     current_task が未確定の場合、そのパターンは照合対象から外れる（fail-closed）。
+#
+# --- 判定規則（設計書 §3.6.1）---
+#
+#   既定deny      … ここに allow が無いパスは書けない
+#   最長一致      … allow と deny が重なる場合は、より具体的な方が勝つ
+#   競合時deny    … 同一具体度で競合したらdenyを採る
+#   正規化先行    … canonical path化してから照合する。.. traversal、
+#                   symlink、リポジトリ外へ解決されるパスは拒否する
+#
+# --- 証跡は追記専用（設計書 §3.6.1, §10.2）---
+#
+# docs/status/agent-runs/** や docs/features/*/reviews/** を
+# **prefixで allow してはならない。** 過去のrun、他タスクのrun、
+# 他Agentのrun、評価対象のrunを上書きでき、追記専用要件を
+# 機械的に保証できなくなる。
+#
+#   「証跡を改変できるAgentは、その証跡を根拠とするゲートを無効化する」
+#
+# 必ず allow-create-only を使い、${CURRENT_TASK} で現在taskへ限定する。
+#
+# --- このファイルは単一Agent分しか表現できない ---
+#
+# 設計書 §3.6 は Agent ごとに異なる論理Write範囲を定めるが、
+# Claude Code の settings.json の hooks は**全Agent共通**に適用される。
+# Agent単位で切り替えるには、Agent別のpolicyファイルを用意し、
+# 起動側（External Runner / Orchestrator）が
+# 対象Agent用のpolicyを配置してからAgentを起動する必要がある。
+# 詳細と限界は templates/hooks/README.md を参照。
+#
+# 以下は TDD Generator（設計書 §3.6）を想定した雛形である。
+# プロジェクトのディレクトリ構成に合わせて置き換えること。
+
+# --- 全Agent共通のdeny（設計書 §3.6 / rules/permissions.md §3）-----------
+# permissions.deny にも同じ内容を書く。hookが起動しない場合に備えた二層防御。
+deny .claude/**
+deny .git/**
+deny docs/status/progress.yaml
+deny docs/status/gate-runs/**
+deny docs/context/manifests/**
+deny secrets/**
+deny .env
+deny .env.*
+
+# --- 対象モジュールとテスト（設計書 §3.6 TDD Generator 行）---------------
+# 実際のモジュールパスへ置き換える。ここを広く取ると、
+# 「対象外タスクの変更禁止」が機械的に強制できなくなる。
+allow src/main/java/com/example/order/**
+allow src/test/java/com/example/order/**
+
+# --- 証跡（create-only、現在taskのみ）------------------------------------
+allow-create-only docs/status/agent-runs/${CURRENT_TASK}/**
+allow-create-only docs/status/changes/${CURRENT_TASK}.yaml
+allow-create-only docs/features/order/reviews/targets/${CURRENT_TASK}-implementation.yaml

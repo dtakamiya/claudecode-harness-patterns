@@ -1,0 +1,55 @@
+# 出典: Claude Code Development Harness 設計書 Version 1.10
+# https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
+#
+# 配布元: templates/bash-allowlist → 利用者の .claude/bash-allowlist へコピーする。
+#
+# 正本: 設計書 §3.6.2（Bash allowlist）, §3.6.4（評価対象コードの実行）,
+#       §16-2（コマンド監査）, templates/rules/permissions.md §4, §6
+#
+# --- 形式 ---
+#
+# 1行1コマンド。空行と # 始まりは無視する。
+# 照合は**パース後の argv[0] との完全一致**である（設計書 §3.6.2）。
+# prefix一致ではないため、`npm` を登録しても `npmx` は通らない。
+#
+# --- 登録前に必須の監査（設計書 §16-2）---
+#
+# allowlist一致は「安全」を意味しない。照合しているのは `npm` という
+# **入口の名前**だけで、その先で動くビルドスクリプト、テストコード、
+# プラグイン、依存は見ていない。
+#
+#   「悪意ある変更を検出するために実行したコマンドが、
+#     その悪意ある変更を実行する」（設計書 §3.6.4）
+#
+# 登録してよいのは、推移的な呼出先まで確認し、次が無いと判断できたものだけ。
+#   - 外部通信
+#   - secret参照
+#   - 危険操作
+#   - 対象外への書込み
+#
+# **確認できないコマンドは登録しない**（設計書 §16-2）。
+#
+# --- baseline.yaml からのコピーは禁止 ---
+#
+# 設計書 §3.6.2: 「baseline.yaml は信頼境界ではない」。
+# Git内の編集可能なファイルであり、改ざんされていればAgentは指示に従うだけで
+# 任意コマンドの実行に到達し得る。baseline に載っていることを
+# 登録理由にしない。監査を経てから、人がここへ書く。
+#
+# --- 以下は雛形である。プロジェクトの実測結果に合わせて置き換えること ---
+
+# --- ビルド / テスト ---
+# 対象言語のものだけを残し、使わない行は削除する。
+# ./gradlew
+# mvn
+# npm
+# pnpm
+# yarn
+# pytest
+# go
+# cargo
+
+# --- 読み取り系のGit操作 ---
+# 書込み系（commit, push, reset, clean）は登録しない。
+# 自動コミットは設計書 §3.5 Recovery で禁止されている。
+# git
