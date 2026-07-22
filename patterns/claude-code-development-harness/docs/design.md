@@ -10,7 +10,7 @@
 |----------|----------------------------------------------------|
 | 対象     | Claude Codeを利用したシステム開発                  |
 | 対象工程 | 要件定義〜実装完了                                 |
-| 版       | Version 1.10 / 2026-07-17（ゲート評価時点・横断ゲート整合版） |
+| 版       | Version 1.11 / 2026-07-23（起動経路定義版） |
 
 # 1. 文書の目的
 
@@ -250,7 +250,7 @@ Evaluator
 |---|---|
 | `PhaseDefinition` | `PHASE-0`〜`PHASE-10`。名称、成果物、終了条件、Agent構成は§5の同番号Phaseを正本とする |
 | `AgentDefinition` | 後掲のAgentDefinition実値表に記載したID。責務と禁止事項は§8、権限の基準は§3.6を正本とする |
-| `SkillDefinition` | `tdd-development@1`（`applicable_phases`: `PHASE-6`, `PHASE-7`, `PHASE-8`、`allowed_agents`: `tdd-generator`, `integration-test-engineer`）。構成とロード規則は§3.7、工程手順は§6〜§7を正本とする。その他のSkillは各`SKILL.md`の追加だけでは登録されず、本表へのID追加を要する |
+| `SkillDefinition` | `harness-orchestration@1`（`applicable_phases`: `PHASE-0`〜`PHASE-10`、`allowed_agents`: `development-orchestrator`）。起動規則は§5.-1を正本とする。<br>`tdd-development@1`（`applicable_phases`: `PHASE-6`, `PHASE-7`, `PHASE-8`、`allowed_agents`: `tdd-generator`, `integration-test-engineer`）。構成とロード規則は§3.7、工程手順は§6〜§7を正本とする。<br>その他のSkillは各`SKILL.md`の追加だけでは登録されず、本表へのID追加を要する |
 
 `PhaseDefinition`の実値は次のとおりとする。`—`は入力または開始ゲートを必要としないことを表す。
 
@@ -281,7 +281,7 @@ Agentの`tools`、`access_policy`、`completion_condition`は次の共通profile
 
 | AgentDefinition id | layer | allowed_phases | allowed_skills | profile / 例外 |
 |---|---|---|---|---|
-| development-orchestrator | control | PHASE-0..10 | — | control |
+| development-orchestrator | control | PHASE-0..10 | harness-orchestration@1 | control |
 | context-builder | control | PHASE-0..10 | — | context_builder |
 | initializer | generator | PHASE-0 | — | generator / production code write禁止 |
 | continuation | control | PHASE-7 | — | control / `progress.yaml`直接write禁止 |
@@ -305,6 +305,18 @@ Agentの`tools`、`access_policy`、`completion_condition`は次の共通profile
 | security-reviewer | evaluator | PHASE-9 | — | evaluator |
 | completion-auditor | evaluator | PHASE-10 | — | evaluator |
 | harness-reviewer | evaluator | PHASE-0 | — | evaluator |
+
+`harness-orchestration@1`は次の実値を持つ。本Skillは工程成果物を作成せず、制御層の手順だけを供給する。
+
+| 属性 | 値 |
+|---|---|
+| description | メインセッションで制御層を実行し、状態復元、次アクション判定、専門Agentへの委譲、ゲート判定、`progress.yaml`更新を行う手順 |
+| triggers | ハーネスの開始、セッション再開、状況確認、次工程への前進、ゲート判定要求 |
+| applicable phase-agent pairs | `PHASE-0`〜`PHASE-10`:`development-orchestrator` |
+| inputs | `progress.yaml`, PhaseRun, 最新handoff, `harness-capabilities.yaml`, 対象Phaseのworkflow定義 |
+| outputs | 状態報告、委譲するAgentRun、`progress.yaml`と`PhaseRun`の更新 |
+| prerequisites | `start`モードを除き`progress.yaml`が存在し、Git状態と`current_commit`が一致すること |
+| tools | Task, Read, Search, Bash（`progress.yaml`・PhaseRun・handoffの原子的更新に限定） |
 
 `tdd-development@1`は次の実値を持つ。
 
@@ -863,6 +875,44 @@ scripts/
 | 10 | 完了監査 | Completion Auditor | トレーサビリティ、完了判定 | DoDと全品質ゲートを満たす |
 
 - AI/LLM ReviewerのPASSは補助証拠に限る。変更を理解した人間Reviewerがコード、テスト、設計意図の一致を確認するまで完了としない。
+
+## 5.-1 ハーネスの起動
+
+§3.4.1の実行規則はDevelopment Orchestratorが工程とAgentを選択するところから始まるが、**そのOrchestrator自身を誰がどう起動するかは別に定める必要がある**。定義しなければ、§14.1の`Agent起動`と§14.2の`Runner起動`はいずれも起点が空白のままとなり、運用者は毎セッション自然言語でハーネス全体を再説明することになる。起動経路は次の2つだけを正本とし、これ以外の起動をハーネスの実行とみなさない。
+
+| 経路 | 実行モード | 起点 | 制御層の所在 |
+|---|---|---|---|
+| A. Skill起動 | Full / Compatible | 運用者がメインセッションで`harness-orchestration` Skillを起動する | メインセッション |
+| B. Runner起動 | Compatible | 信頼済みExternal Harness Runnerをコマンドラインから起動する | Runnerプロセス |
+
+### 経路A: Skill起動
+
+`harness-orchestration@1`をメインセッションでロードし、Development Orchestratorの責務をメインセッション自身が担う。
+
+- **制御層をサブエージェントとして起動しない。** サブエージェントの文脈は起動ごとに破棄されるため、工程判定、ゲート判定、委譲、状態更新を1ターンで完結できない場合に状態を失う。§3.4.1の`PhaseRun`は複数の`AgentRun`にまたがるため、制御層は会話ターンをまたいで持続する場所に置く。
+- したがって`.claude/agents/development-orchestrator.md`は、**Skillがロードする権威ある責務定義**として参照する。同ファイルをサブエージェントとして起動する運用は本設計の想定外とする。
+- Skillは次のモードを持つ。`next`、`gate`、`start`以外は読み取り専用とする。
+
+| モード | 内容 |
+|---|---|
+| `status` | 現在のPhase、task、run状態、ゲート状態、blocking事項を報告する |
+| `resume` | セッション状態を復元・検証し、次に実行可能なアクションを報告する |
+| `next` | 状態復元後、次の1アクションだけを実行する。工程を無言で連鎖させない |
+| `gate` | 記録済み証跡から現在Phaseのexit gateだけを判定する |
+| `start` | `progress.yaml`が存在しない場合に`initializer`でPHASE-0を開始する |
+
+- `start`を除く全モードで、`progress.yaml`、`current_phase_run_ref`のPhaseRun、最新handoff、Git状態、`harness-capabilities.yaml`を読んでから判断する。**会話履歴から現在地を推定しない**（§2 成果物主義）。
+- Git状態と`progress.yaml.current_commit`が一致しない場合はblockingとして停止し、工程を進めない。
+
+### 経路B: Runner起動
+
+Hooksを利用できない環境、またはCIから無人実行する場合は、信頼済みExternal Harness Runnerを起点とする。手順は§14.2に従い、Runnerは`quality-gate.sh`等の検証を経てからOrchestratorへ状態更新を許可する。**Runnerの実体と起動コマンドは導入時に定義し、`harness-capabilities.yaml`へ記録する**（§3.5.1）。定義がない環境で経路Bを名乗ってはならない。
+
+### 共通規則
+
+- どちらの経路でも、`progress.yaml`と集約`PhaseRun`のsingle writerはDevelopment Orchestratorだけとする（§3.4.1 実行規則6）。
+- 経路AとBを同一タスクへ同時に適用しない。両者が並行して状態を書くと、§10のrevisionによる楽観ロックが競合検出のたびに失敗し、進行できない。
+- 起動経路が確立していない環境はManualモードであり、§3.5.1に従い本格運用に使用しない。
 
 ## 5.0 Phase 0: 初期化と継続準備
 
@@ -1695,6 +1745,8 @@ CLAUDE.mdは詳細な設計書の置き場ではなく、常に守る短い指�
 ## 14.1 Fullモード：権限とHooksの適用順序
 
 ```text
+ハーネス起動（§5.-1 経路A）
+  ↓ 状態復元・Git整合検証
 Agent起動
   ↓ SubagentStart: role/task/context/permissionを注入
 Tool実行要求
@@ -1713,7 +1765,7 @@ Agent終了要求
 ## 14.2 Compatibleモード：External Runnerの適用順序
 
 ```text
-Runner起動
+Runner起動（§5.-1 経路B。起動コマンドはharness-capabilities.yamlに記録）
   ↓ Capability Profile検証
   ↓ permissions / sandbox / worktree準備
 Agent起動
@@ -1774,7 +1826,7 @@ RunnerはAgentの自然言語による完了宣言を信用せず、終了コー
 4. `initializer`を作成し、production code変更前にリポジトリ構造、ビルド、UT、IT、静的解析を実行してコマンド、終了コード、開始時SHAを`baseline.yaml`へ記録する。
 5. `progress.yaml`、`baseline.yaml`、ハンドオフ、context manifestのテンプレートを作成する。
 6. 要件定義、設計、実装、レビューの最小ワークフローを作成する。
-7. Development Orchestrator、Continuation Agent、Context Builderを作成する。
+7. Development Orchestrator、Continuation Agent、Context Builderを作成する。あわせて§5.-1の起動経路を確定させる。経路Aでは`harness-orchestration` Skillを配置し、経路BではRunnerの実体と起動コマンドを定義して`harness-capabilities.yaml`へ記録する。どちらも無い状態で運用を開始しない。
 8. 主要Planner、TDD Generator、Integration Test Engineer、各Evaluatorを作成する。
 9. 監査済みのUT・IT・静的解析スクリプトを統一する。
 10. Capability Profileを作成し、Hooks利用可能時は`PreToolUse`、`SubagentStop`、`Stop`を実装し、Hooks非対応時はExternal Runnerと検証スクリプトを実装する。
@@ -1795,7 +1847,7 @@ UI変更はpreview/browserで対象画面、主要操作、関連viewportを確�
 >
 > `CLAUDE.md`、Project Initializer、Continuation Agent、Context Builder、Development Orchestrator、Implementation Planner、TDD Generator、Implementation Evaluator、Integration Test Engineer、Completion Auditor、`progress.yaml`、`baseline.yaml`、context manifest、Capability Profile、task・handoffテンプレート、UT/IT実行スクリプト、およびFullモードのHooks群またはCompatibleモードのExternal Runner。
 
-Worktree、MCP Tool Gateway、広範なHarness Evalsは段階導入できる。ただし、セッション再開性、コンテキスト選定、権限制御、終了ゲートは最小構成から外さない。Hooksは必須ではないが、Hooksを使わない場合はpermissions、sandbox、External Runner、CIによるCompatibleモードを必須とする。
+Worktree、MCP Tool Gateway、広範なHarness Evalsは段階導入できる。ただし、セッション再開性、コンテキスト選定、権限制御、終了ゲート、および§5.-1の起動経路は最小構成から外さない。Hooksは必須ではないが、Hooksを使わない場合はpermissions、sandbox、External Runner、CIによるCompatibleモードを必須とする。
 
 # 18. 設計上の決定事項
 
@@ -1816,6 +1868,7 @@ Worktree、MCP Tool Gateway、広範なHarness Evalsは段階導入できる。�
 | DEC-011 | Hooksを単一必須依存にせずCapability Profileで実行方式を選択する | Hooks非対応環境でも決定論的ゲートを維持するため |
 | DEC-012 | Hooks非対応時はExternal Runnerを終了ゲートとする | Agentの自己申告ではなく成果物と終了コードで遷移を判定するため |
 | DEC-013 | ハーネス変更をEvalsで回帰検証する | プロンプトや構成変更による品質劣化を定量的に検出するため |
+| DEC-014 | 制御層をメインセッションのSkillとして起動し、サブエージェント化しない | サブエージェントの文脈は起動ごとに失われ、複数AgentRunにまたがる`PhaseRun`の制御を維持できないため |
 
 # 19. 段階導入方針
 
@@ -2183,6 +2236,44 @@ review:
   production_condition:
     - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
     - 文書整合性検証をCIで継続実行する
+```
+
+# 付録N. Version 1.11変更点
+
+Version 1.11は、**ハーネスの起動方法が本書のどこにも定義されていない**という欠落を修正する。§3.4.1の実行規則はDevelopment Orchestratorが工程とAgentを選択するところから始まり、§14.1は`Agent起動`、§14.2は`Runner起動`から始まるが、そのOrchestrator自身とRunner自身の起点が空白のままだった。運用者は毎セッション自然言語でハーネス全体を再説明する必要があり、§2の成果物主義とセッション再開性が実運用で成立しなかった。
+
+## N.1 変更点
+
+- **§5.-1 ハーネスの起動を新設。** 経路A（メインセッションでの`harness-orchestration` Skill起動）と経路B（External Harness Runner起動）の2経路を正本として定義し、これ以外をハーネスの実行とみなさないこととした。経路Aの5モード（`status` / `resume` / `next` / `gate` / `start`）と、`start`を除く全モードでの状態復元義務を規定した。
+- **制御層をサブエージェント化しない方針を明文化（DEC-014）。** サブエージェントの文脈は起動ごとに破棄されるため、複数の`AgentRun`にまたがる`PhaseRun`の制御を維持できない。`.claude/agents/development-orchestrator.md`はSkillがロードする権威ある責務定義として位置付け、同ファイルをサブエージェントとして起動する運用は想定外とした。
+- **§3.4.1のSkillDefinitionカタログへ`harness-orchestration@1`を登録。** 従来は`tdd-development@1`のみが登録されており、「ここにないIDは未定義として扱う」規則に照らすと、実在する`harness-orchestration` Skillは設計上存在しないことになっていた。実値表とAgentDefinition実値表の`allowed_skills`も併せて更新した。
+- **§14.1・§14.2の図へ起点を追加。** それぞれ§5.-1の経路A・経路Bを参照する行を先頭に加えた。
+- **§16-7・§17へ起動経路の確立を追加。** 導入時に経路AまたはBのいずれかを確定させることを要件とし、最小導入構成から外さない項目に加えた。
+
+## N.2 影響
+
+- 既存のAgent雛形、ゲート定義、状態schemaへの変更はない。本変更は起動経路の定義と参照整合の追加に閉じる。
+- 経路Bを採る環境では、Runnerの実体と起動コマンドを`harness-capabilities.yaml`へ記録することが新たな導入要件となる。記録がない環境で経路Bを名乗ることはできない。
+- 経路AとBの同時適用は§10のrevision楽観ロックが競合し続けるため禁止とした。
+
+## N.3 判定
+
+```yaml
+review:
+  target_version: 1.11
+  supported_modes:
+    full: production_candidate
+    compatible_no_hooks: production_candidate
+    manual: poc_only
+  document_consistency: passed
+  runtime_evidence: pending
+  result: PASS_FOR_POC
+  production_condition:
+    - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
+    - 文書整合性検証をCIで継続実行する
+    - §3.6.3の実行時作業領域と§3.6.4の隔離実行環境が、強制側で実装済みであること
+    - §3.6.5のBrowser / Preview供給が、UI変更を扱うプロジェクトで実装済みであること
+    - §5.-1の起動経路が、経路Aまたは経路Bのいずれかで確立済みであること
 ```
 
 # 付録M. Version 1.10変更点
