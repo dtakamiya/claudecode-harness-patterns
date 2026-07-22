@@ -30,9 +30,43 @@ https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/clau
 | `scripts/verify-redirect-target.sh` | リダイレクト先をcanonical path化してwritableと照合 |
 | `scripts/verify-write-scope.sh` | write scope照合、create-only、symlink・traversal拒否 |
 
-表中のパスは**利用者リポジトリでの配置先**であり、雛形の配布元は `templates/scripts/` である。`pre-tool-use.sh` は `${CLAUDE_PROJECT_DIR}/scripts/` を参照するため、この3本を配置しないと**Bash・Write・Editが全てdenyされる**（fail-closed設計のため、設定漏れは「制限なし」ではなく「全拒否」になる）。`.claude/` 配下だけをコピーしても動作しない。
+導入と診断のためのスクリプトも同じ場所から配布する。
+
+| スクリプト | 責務 |
+|---|---|
+| `scripts/install-harness.sh` | 雛形を利用者リポジトリへ冪等に導入する（配布元から実行する） |
+| `scripts/verify-harness-install.sh` | 導入先がfail-closed条件を満たすか診断する |
+
+表中のパスは**利用者リポジトリでの配置先**であり、雛形の配布元は `templates/scripts/` である。`pre-tool-use.sh` は `${CLAUDE_PROJECT_DIR}/scripts/` を参照するため、この3本を配置しないと**Bash・Write・Editが全てdenyされる**（fail-closed設計のため、設定漏れは「制限なし」ではなく「全拒否」になる）。`.claude/` 配下だけをコピーしても動作しない。**この取り違えを防ぐため、導入には下記の `install-harness.sh` を使うこと。**
 
 ## 導入
+
+配布元のテンプレートから、導入先を指して実行する。導入先へコピーして使うのではない（コピー漏れこそが防ごうとしている障害であり、installer自身が漏れの対象になってはならない）。
+
+```bash
+# <TEMPLATES> は templates/ の絶対パス
+bash <TEMPLATES>/scripts/install-harness.sh --target /path/to/your-project
+```
+
+冪等であり、何度実行してもよい。差分がある場合だけ `CREATE` / `UPDATE` を報告する。
+
+- `--dry-run` … 何も書き込まずに実行計画（と雛形との差分の有無）を表示する
+- `--verify-only` … 導入せず診断だけ行う
+- `--force` … カスタマイズ済み設定の雛形を `<file>.template` として併置する
+
+hooks と `verify-*.sh` は**無条件で雛形へ揃える**（ロジックにカスタマイズ余地を認めるとアップグレードできなくなるため）。一方 `settings.json`・`bash-allowlist`・`write-scope-policy` は**利用者所有**として扱い、既存ファイルは上書きしない。`chmod +x` はコピーの有無に関わらず毎回適用するため、実行ビットが落ちた状態も再実行で修復できる。
+
+導入後は自動で `verify-harness-install.sh` が走る。障害時に単独で診断することもできる。
+
+```bash
+bash scripts/verify-harness-install.sh --target .
+```
+
+`bash-allowlist` と `write-scope-policy` は**雛形のままでは使えない**。プロジェクトのモジュール構成と、§16-2 の監査を経たコマンドへ置き換えること。とくに `bash-allowlist` は雛形が全行コメントであり、**そのままでは全てのBashコマンドが `ALLOWLIST_MISS` で拒否される**。この状態は症状としては「hookが未設置」と区別がつかないため、診断スクリプトが `WARN` で明示的に報告する。
+
+### 手作業で導入する場合
+
+`install-harness.sh` を使えない環境向けの代替手段。**取りこぼしやすく、推奨しない**（`scripts/` の配置漏れ、`chmod +x` の忘れ、ネストした `skills/**` の取りこぼしが起きやすい）。
 
 ```bash
 cp templates/hooks/*.sh              .claude/hooks/
@@ -42,8 +76,6 @@ cp templates/write-scope-policy      .claude/write-scope-policy
 cp templates/scripts/verify-*.sh     scripts/
 chmod +x .claude/hooks/*.sh scripts/verify-*.sh
 ```
-
-`bash-allowlist` と `write-scope-policy` は**雛形のままでは使えない**。プロジェクトのモジュール構成と、§16-2 の監査を経たコマンドへ置き換えること。
 
 ---
 
@@ -134,6 +166,8 @@ bash scripts/test-verify-write-scope.sh
 bash scripts/test-pre-tool-use-hook.sh
 bash scripts/test-post-tool-use-hook.sh
 bash scripts/test-stop-hooks.sh
+bash scripts/test-install-harness.sh
+bash scripts/test-verify-harness-install.sh
 ```
 
 各テストは「拒否されるべきものが素通りしないこと」を主眼に置く。**この種のガードは、壊れても出力が静かなため、変異テスト（検査を1つずつ無効化してテストが落ちることの確認）で実効性を確かめること。** 検査を無効化してもテストが通る場合、そのテストは何も守っていない。
