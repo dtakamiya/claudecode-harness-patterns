@@ -60,6 +60,13 @@ Human Review Evidenceは認証済みreview provider、protected branch approval�
 - [TDD Development Skill雛形](templates/skills/tdd-development/SKILL.md)
 - [Harness Orchestration Skill雛形](templates/skills/harness-orchestration/SKILL.md)
 
+### Hook・導入スクリプト雛形
+
+Deterministic Guardrailの実装と、その導入・診断を行うスクリプトです。導入方法と既知の限界は[Hooks README](templates/hooks/README.md)を参照してください。
+
+- [導入スクリプト](templates/scripts/install-harness.sh)
+- [導入診断スクリプト](templates/scripts/verify-harness-install.sh)
+
 ### Workflow雛形
 
 工程ごとの入力、担当Agent、手順、成果物、品質ゲート、ブロック時の戻り先を定義します。利用者の`.claude/workflows/`へコピーして使います。
@@ -80,7 +87,7 @@ Human Review Evidenceは認証済みreview provider、protected branch approval�
 
 1. main/master以外のfeatureブランチを用意する。
 2. 既存の検証script、Hook、Runnerと推移的な呼出先をread-onlyで監査する。
-3. permissions、sandbox、Network既定deny、権限境界を設定する。
+3. permissions、sandbox、Network既定deny、権限境界を設定する。Hook群は`bash <TEMPLATES>/scripts/install-harness.sh --target .`で導入する（冪等。`scripts/`の配置漏れと`chmod +x`忘れは**Bash・Write・Editの全deny**になるため、手作業のcpは推奨しない）。導入後は`bash scripts/verify-harness-install.sh --target .`で診断できる。
 4. 設計書のPhase 0に従って変更前baselineを採取する。
 5. `CLAUDE.md`、`progress.yaml`、最初のhandoff、context manifestを用意する。
 6. 現在工程に必要なAgentとSkillだけを用意し、品質ゲートをRunnerまたはHooksで強制する。
