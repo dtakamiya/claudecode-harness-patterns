@@ -1,7 +1,7 @@
 # PHASE-1: 要件定義
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.10
+出典: Claude Code Development Harness 設計書 Version 1.12
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/workflows/`が配布元であり、
@@ -21,6 +21,8 @@ PhaseDefinition (正本: 設計書 §3.4.1 PhaseDefinition実値表, §5.1):
 ## 目的
 
 要求を構造化し、一意なIDと検証可能な受入条件を持つ要件へ落とす（設計書 §5.1）。
+
+要件書は人間の合意記録であると同時に、**後続する全AgentRunの権威ある入力**である。実装がAgentによって高速化されるほど律速は要件記述へ移るため、本工程を省略の対象としない（設計書 §5.1）。
 
 ## 開始条件
 
@@ -49,13 +51,31 @@ PhaseDefinition (正本: 設計書 §3.4.1 PhaseDefinition実値表, §5.1):
    - 機能要件と非機能要件に一意なIDを付与する（例: `REQ-F-001`、`REQ-NF-001`）。
    - 各要件に検証可能な受入条件を付与する（例: `AC-001-01`）。
    - 受入条件はEARSの5文型（Ubiquitous / Event-driven / State-driven / Unwanted behavior / Optional feature）で記述する（設計書 §5.1.1）。
-   - 前提、制約、スコープ外、未解決事項を明示する。
+   - 設計書 §5.1.2の必須節をすべて満たす。
 4. 設計・実装上の手段を早期に固定しすぎない（設計書 §5.1）。
 5. 未確定事項は推測せず、質問・課題として記録し、重大なものはblockingとして次工程をブロックする（設計書 §2 推測禁止）。
 
+## 要件書の必須節（設計書 §5.1.2）
+
+| 節 | 内容 |
+|---|---|
+| 目的 | 解決する課題と、解決された状態。1〜3行 |
+| 用語定義 | ドメイン語彙と、その定義 |
+| 前提 | 成立を仮定している事項 |
+| 制約 | 守るべき制約と、その指定元 |
+| スコープ外 | 対象外とする事項と理由 |
+| 成功指標 | 機能全体の達成を測る指標、計測方法、計測時期（計測しない場合は理由を記録） |
+| 機能要件 | `REQ-F-xxx`と受入条件 |
+| 非機能要件 | `REQ-NF-xxx`と受入条件 |
+| 未解決事項 | 質問、blocking判定、確認先 |
+
+**成功指標と受入条件を混同しない。** 受入条件は要件ごとに実装完了時点でUT/ITにより判定する。成功指標は機能全体をリリース後の運用計測で評価するものであり、**品質ゲートおよびDefinition of Doneの判定に使わない**（設計書 §5.1.2）。
+
+必須節が存在しても内容が`TBD`のみである場合は未充足として扱う。確定できない事項は未解決事項へ質問として記録する（設計書 §5.1.2、§2 推測禁止）。
+
 ## 成果物
 
-- `docs/features/<feature-id>/requirements/<name>.md`
+- `docs/features/<feature-id>/requirements/<name>.md`（設計書 §5.1.2の必須節を満たす）
 - 受入条件（要件IDへ紐付ける）
 - 未解決事項（blocking判定付き）
 - `docs/status/agent-runs/<task>/<run-id>.yaml`
@@ -65,7 +85,7 @@ PhaseDefinition (正本: 設計書 §3.4.1 PhaseDefinition実値表, §5.1):
 | ゲート | 種別 | 条件 |
 |---|---|---|
 | `REQUIREMENTS_PLAN` | intra-phase | Plannerが範囲、論点、成果物、終了条件を定義（設計書 §11） |
-| `REQUIREMENTS_DRAFT` | exit gate | 要件ID、受入条件、未解決事項、スコープが明確（設計書 §11） |
+| `REQUIREMENTS_DRAFT` | exit gate | §5.1.2の必須節が揃い、要件ID、受入条件、未解決事項、スコープが明確（設計書 §11） |
 | `ACCESS_POLICY` / `STATE_REVISION` | cross-cutting | 設計書 §11.0 |
 
 評価順序は`REQUIREMENTS_PLAN` → `REQUIREMENTS_DRAFT`とする。exit gateは、当該Phaseのintra-phase gateがすべてPASSした場合だけPASSし得る（設計書 §11.0）。

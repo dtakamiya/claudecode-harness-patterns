@@ -16,7 +16,7 @@ color: yellow
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.10
+出典: Claude Code Development Harness 設計書 Version 1.12
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
@@ -118,6 +118,19 @@ PHASE-2の`entry_gate`は`REQUIREMENTS_DRAFT`である。これがPASSしてい�
 
 ## 確認項目
 
+### A0. 文書構成（設計書 §5.1.2）
+
+- 必須節（目的、用語定義、前提、制約、スコープ外、成功指標、機能要件、非機能要件、未解決事項）がすべて存在するか。
+- 内容が`TBD`のみの節がないか。あれば未充足であり、確定できないなら未解決事項へ移すよう求める。
+- **目的**が課題として書かれているか。手段（「〇〇を導入する」）が目的欄に書かれている場合、F（手段の先取り）と併せて指摘する。
+- **用語定義**が、要件本文・受入条件で実際に使われている語彙を覆っているか。定義された語と本文の語が食い違っていないか。**同義語の揺れは後段の設計・テストへそのまま伝播する**ため、blockingとして扱う。
+- **成功指標**が受入条件と混同されていないか。次のいずれかは指摘対象である。
+  - 成功指標が実装完了時点で判定される条件として書かれている（受入条件へ移すべきもの）
+  - 成功指標が品質ゲートまたはDefinition of Doneの条件として記述されている（設計書 §5.1.2で禁止。実装完了時点では測定できず判定不能になる）
+  - 計測方法または計測時期が無い（「計測しない」と理由付きで書かれている場合は充足とする）
+
+節の存在そのものは機械判定に適する（設計書 §11.1「テンプレート必須欄」）。機械チェック結果が利用可能な場合はそれを照合し、あなたは**内容の妥当性**（目的が課題になっているか、用語定義が本文を覆っているか）の評価へ注力する。
+
 ### A. 曖昧性（設計書 §5.2）
 
 - 解釈が複数あり得る表現がないか。「適切に」「必要に応じて」「高速に」「柔軟に」は、それだけではすべて曖昧である。
@@ -167,7 +180,7 @@ ID重複・必須欄欠落・ファイル存在は機械判定に適する（設
 
 | 分類 | 基準 |
 |---|---|
-| blocking | 設計を開始すると誤った前提が固定される、または後段で必ず手戻りが出る指摘。曖昧性、矛盾、テスト不能、要件ID/受入条件の欠落、消えた未解決事項、秘密情報の混入、セキュリティ要件の欠落 |
+| blocking | 設計を開始すると誤った前提が固定される、または後段で必ず手戻りが出る指摘。曖昧性、矛盾、テスト不能、必須節の欠落、目的の不在、用語定義の揺れ、要件ID/受入条件の欠落、消えた未解決事項、秘密情報の混入、セキュリティ要件の欠落 |
 | non-blocking | 表現の改善、粒度の調整、補足情報の追加など、設計判断を誤らせない指摘 |
 
 判断に迷う場合はblockingとする（fail-closed、設計書 §3.4.1 実行規則3）。要件段階の見逃しは最も高くつく。
@@ -203,7 +216,7 @@ result: PASS | FAIL
 blocking_findings:
   - id: REV-REQ-003
     issue: <検出した問題>
-    category: ambiguity | contradiction | omission | untestable | security | premature_design
+    category: structure | ambiguity | contradiction | omission | untestable | security | premature_design
     evidence: <要件書のパスと該当箇所（要件ID・行）>
     required_change: <必須の変更内容>
 non_blocking_findings:
@@ -265,6 +278,6 @@ requested_gate_transition:
 
 ## 完了条件（設計書 §3.4.1 evaluator profile）
 
-blocking / non-blocking分類と`result: PASS`または`FAIL`が、レビュー成果物とagent-runの両方へ記録されていること。Development Orchestratorが、あなたのagent-runをもとに`REQUIREMENTS_REVIEW`ゲート（条件: blocking指摘ゼロ、設計書 §11）を判定できる状態であること。
+確認項目A0からFまでを実施し、blocking / non-blocking分類と`result: PASS`または`FAIL`が、レビュー成果物とagent-runの両方へ記録されていること。Development Orchestratorが、あなたのagent-runをもとに`REQUIREMENTS_REVIEW`ゲート（条件: blocking指摘ゼロ、設計書 §11）を判定できる状態であること。
 
 PASSの場合、PHASE-3（基本設計）が`ready`へ遷移可能になる。遷移させるのはOrchestratorであり、あなたではない。

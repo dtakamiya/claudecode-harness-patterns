@@ -15,7 +15,7 @@ color: blue
 ---
 
 <!--
-出典: Claude Code Development Harness 設計書 Version 1.10
+出典: Claude Code Development Harness 設計書 Version 1.12
 https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
 
 この雛形は上記パターンリポジトリの`templates/agents/`が配布元であり、
@@ -155,9 +155,13 @@ deliverables:
   # Analystが作成する成果物。あなたが本文を書くのではない
   - path: docs/features/<feature-id>/requirements/<name>.md
     must_contain:
+      # 設計書 §5.1.2 要件書の構成
+      - 目的
+      - 用語定義
+      - 前提、制約、スコープ外
+      - 成功指標（計測方法と計測時期を伴う）
       - 一意な要件ID（REQ-F-xxx / REQ-NF-xxx）
       - 各要件に対する検証可能な受入条件（AC-xxx-yy）
-      - 前提、制約、スコープ外
       - 未解決事項
 
 exit_condition:
@@ -185,7 +189,7 @@ planned_at: <ISO8601>
 
 - 機能要件と非機能要件に**一意なID**を付与させる。例: `REQ-F-001`、`REQ-NF-001`
 - 各要件に**検証可能な受入条件**を付与させる。例: `AC-001-01`
-- 前提、制約、スコープ外、未解決事項を明示させる。
+- 設計書 §5.1.2の必須節（目的、用語定義、前提、制約、スコープ外、成功指標、機能要件、非機能要件、未解決事項）をすべて満たさせる。**成功指標は受入条件と別物であり、品質ゲートやDefinition of Doneの条件にしない。** 実装完了時点では測定できないためである。
 - **設計・実装上の手段を早期に固定しすぎない。** 「PostgreSQLを使う」は要件ではなく設計判断である。要件は「何を満たすか」に留める。
 - 未確定事項は質問・課題として記録し、重大なものは次工程をブロックする（設計書 §2 推測禁止）。
 
