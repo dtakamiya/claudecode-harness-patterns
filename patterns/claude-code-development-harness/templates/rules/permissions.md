@@ -120,6 +120,10 @@ docs/archive/**
 >
 > Context Builder自身にも、§2「証跡は追記専用」と同じ制約は課す。書込みは現在taskのmanifest一点へ限定し、`state-runner`・Bash・handoff・業務成果物・Agent定義・permissions設定・`progress.yaml`の編集を禁止する（§3の表）。
 
+### bootstrapプロファイルでの現実的な対応（実装計画 quizzical-munching-origami §2）
+
+Agent単位の`PreToolUse`分岐（上記）は、`.claude/write-scope-policy`単一ファイルによるテンプレート実装では提供していない。`templates/bootstrap/write-scope-policy`は、この限界を踏まえた上で`docs/context/manifests/**`を**deny→allowへ反転**させている。Agent単位分岐を実装しないままdenyを維持すると、Context Builderが成果物を一切出力できず`ACCESS_POLICY`ゲートを構造的に満たせなくなり、導入直後のハーネス全体がデッドロックする（上記の指摘そのもの）。allowへ倒すことで、Context Builder以外のAgentも理論上は`docs/context/manifests/**`へ書けてしまうが、これは「単一policyで全Agentを表現する」という設計上の制約から生じる既知のトレードオフであり、Agent単位の強制が必要な運用では、起動側が対象Agent用のpolicyへ差し替える構成（本節冒頭の分岐）を別途実装すること。
+
 ## 4. Bash allowlist（設計書 §3.6.2）
 
 Shell範囲を「build/test限定」等と定めた行は、**呼び出し可能なコマンド名の固定allowlist**として強制する。allowlistはCompatibleモードの代替手段ではなく、**Fullモードでも必須**とする。

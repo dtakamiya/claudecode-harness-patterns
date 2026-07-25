@@ -1,0 +1,47 @@
+# 出典: Claude Code Development Harness 設計書
+# https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
+#
+# 配布元: templates/bootstrap/write-scope-policy → 利用者の .claude/write-scope-policy へコピーする。
+# --profile bootstrap（既定）で install-harness.sh が配置する。
+#
+# 正本: 実装計画 quizzical-munching-origami §2, 設計書 §3.6.1, templates/rules/permissions.md §2, §3
+#
+# --- このプロファイルの位置づけ ---
+#
+# strictプロファイル（templates/write-scope-policy）はプロジェクト固有の
+# ソースパスをallowに要求するため、導入直後は allow が1件も有効にならない。
+# このbootstrapプロファイルは、Orchestrator/初期化Agentが PHASE-0 を
+# 進めるために必要な最小のWrite範囲だけを許可する。
+#
+# --- docs/context/manifests/** を allow へ倒している理由 ---
+#
+# templates/rules/permissions.md §3 は、単一のwrite-scope-policyで全Agentを
+# 表現する限界として「Context Builder以外はdeny」という**Agent単位の分岐**を
+# 要求している。本ファイルは全Agent共通の単一policyであり、Agent単位分岐は
+# 表現できない。denyのままでは Context Builder 自身が manifest を出力できず、
+# ACCESS_POLICY ゲートを構造的に満たせなくなる（同ファイル §3 該当箇所参照）。
+# 単一policyでの表現の限界として、ここではallow側に倒す。
+# Agent単位の強制が必要な場合は、起動側が対象Agent用のpolicyへ差し替えること。
+
+# --- 全Agent共通のdeny ---
+deny .claude/**
+deny .git/**
+deny docs/status/progress.yaml
+deny docs/status/phase-runs/**
+deny docs/status/gate-runs/**
+deny secrets/**
+deny .env
+deny .env.*
+
+# --- bootstrap期の許可範囲 ---
+allow docs/status/.staging/**
+allow docs/status/baseline.yaml
+allow docs/project/**
+allow docs/context/manifests/**
+allow docs/features/**
+allow CLAUDE.md
+
+# --- 証跡（create-only、現在taskのみ）---
+allow-create-only docs/features/**/reviews/targets/**
+allow-create-only docs/status/agent-runs/${CURRENT_TASK}/**
+allow-create-only docs/status/changes/${CURRENT_TASK}.yaml

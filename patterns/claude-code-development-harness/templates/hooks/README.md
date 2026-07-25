@@ -36,6 +36,19 @@ https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/clau
 |---|---|
 | `scripts/install-harness.sh` | 雛形を利用者リポジトリへ冪等に導入する（配布元から実行する） |
 | `scripts/verify-harness-install.sh` | 導入先がfail-closed条件を満たすか診断する |
+| `scripts/harness-state-write.sh` | `docs/status/.staging/`のステージングを検証してから`progress.yaml`等をatomic renameで確定する |
+
+## bootstrapプロファイルとステージング経路
+
+`install-harness.sh`の既定プロファイル（`--profile bootstrap`、詳細は[README「最小導入手順」](../../README.md#最小導入手順)）では、`docs/status/progress.yaml`は`permissions.deny`と`write-scope-policy`の両方でdenyされたままであり、通常のWriteツールでは直接確定できない。これは意図的な設計であり、証跡の書込み経路を単一化するためである。
+
+状態を更新するAgentは次の手順を踏む。
+
+1. 通常のWriteツールで`docs/status/.staging/progress.yaml`（または`phase-run-<id>.yaml`、`handoff-<feature-id>-<name>.md`）へ書く。ステージング配下は`write-scope-policy`でallowされている。
+2. `./scripts/harness-state-write.sh progress`（または`phase-run <id>`、`handoff <feature-id> <name>`）をBashで実行する。allowlist照合はargv[0]の完全一致であり、この呼び出し形（`./scripts/`始まり）が固定の規約である。
+3. ラッパは内容を検証（revisionの整合、必須fieldの存在、識別子のtraversal拒否、symlink拒否）してから、確定先パス（スクリプト内でホワイトリスト固定）へatomic renameする。検証に失敗すればfail-closedで拒否し、ステージング側のファイルは変更されない。
+
+`docs/status/gate-runs/**`は確定先に含まれない。信頼済みRunnerだけが書く証跡であり、Agent経由の書込み経路を意図的に用意していない。
 
 表中のパスは**利用者リポジトリでの配置先**であり、雛形の配布元は `templates/scripts/` である。`pre-tool-use.sh` は `${CLAUDE_PROJECT_DIR}/scripts/` を参照するため、この3本を配置しないと**Bash・Write・Editが全てdenyされる**（fail-closed設計のため、設定漏れは「制限なし」ではなく「全拒否」になる）。`.claude/` 配下だけをコピーしても動作しない。**この取り違えを防ぐため、導入には下記の `install-harness.sh` を使うこと。**
 
@@ -168,6 +181,8 @@ bash scripts/test-post-tool-use-hook.sh
 bash scripts/test-stop-hooks.sh
 bash scripts/test-install-harness.sh
 bash scripts/test-verify-harness-install.sh
+bash scripts/test-bootstrap-install.sh          # bootstrapプロファイルの受入テスト
+bash templates/scripts/test-harness-state-write.sh
 ```
 
 各テストは「拒否されるべきものが素通りしないこと」を主眼に置く。**この種のガードは、壊れても出力が静かなため、変異テスト（検査を1つずつ無効化してテストが落ちることの確認）で実効性を確かめること。** 検査を無効化してもテストが通る場合、そのテストは何も守っていない。

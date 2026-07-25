@@ -19,10 +19,25 @@
     "",
     "hookは実行される前提のガードであり、hookスクリプトが消えた・実行権が落ちた・",
     "シェルが無い等で起動しなければ何も守らない。秘密情報や制御面のパスは、",
-    "hookに依存しない permissions.deny 側で先に遮断する。"
+    "hookに依存しない permissions.deny 側で先に遮断する。",
+    "",
+    "--- permissions.allow を読み取り系のみに絞る理由 ---",
+    "",
+    "実装計画 quizzical-munching-origami §3。Read/Glob/Grep/Taskは読み取り・",
+    "委譲のみで書込みを伴わないため、無条件allowにしても安全側に倒れる。",
+    "Bash・Writeは意図的にここへ含めない。人の承認を通し、PreToolUse Hookの",
+    "判定（allowlist照合・write scope照合）を経由させるため。",
+    "permissions.deny の Read(./.env) 等はallowより優先されるため、",
+    "秘密ファイルの読み取りはこのallow拡張では解禁されない。"
   ],
 
   "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Task"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",

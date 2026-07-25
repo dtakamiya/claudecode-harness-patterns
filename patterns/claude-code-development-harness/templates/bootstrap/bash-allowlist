@@ -1,0 +1,46 @@
+# 出典: Claude Code Development Harness 設計書
+# https://github.com/dtakamiya/claudecode-harness-patterns/blob/main/patterns/claude-code-development-harness/docs/design.md
+#
+# 配布元: templates/bootstrap/bash-allowlist → 利用者の .claude/bash-allowlist へコピーする。
+# --profile bootstrap（既定）で install-harness.sh が配置する。
+#
+# 正本: 実装計画 quizzical-munching-origami §2, 設計書 §3.6.2, §16-2
+#
+# --- このプロファイルの位置づけ ---
+#
+# strictプロファイル（templates/bash-allowlist）と異なり、導入直後から
+# PHASE-0 を進められるよう最小限の実効行を持たせている。
+# 「installer -> Skill start -> PHASE-0」の疎通を通すための最小集合であり、
+# プロジェクト固有のビルド/テストコマンドはここに含まれない。
+#
+# --- 形式 ---
+#
+# 1行1コマンド。空行と # 始まりは無視する。
+# 照合は**パース後の argv[0] との完全一致**である（設計書 §3.6.2）。
+#
+# --- 追記前に必須の監査（設計書 §16-2）---
+#
+# allowlist一致は「安全」を意味しない。PHASE-0でプロジェクトの実際の
+# ビルド/テストコマンドを実測したら、推移的な呼出先まで確認したうえで
+# ここへ追記すること。**確認できないコマンドは登録しない。**
+
+# --- 状態書込みラッパ（実装計画 §1）---
+# progress.yaml / phase-run / handoff の確定はこのラッパ経由でのみ行う。
+# argv[0]の完全一致なので、呼び出し形は "./scripts/harness-state-write.sh" に固定される。
+./scripts/harness-state-write.sh
+
+# --- 読み取り系のGit操作 ---
+# 書込み系（commit, push, reset, clean）は登録しない。
+# 自動コミットは設計書 §3.5 Recovery で禁止されている。
+git
+
+# --- ビルド / テスト（PHASE-0実測後に人が追記）---
+# 対象言語のものをPHASE-0で確認してから追記する。
+# ./gradlew
+# mvn
+# npm
+# pnpm
+# yarn
+# pytest
+# go
+# cargo

@@ -23,7 +23,14 @@
 #   テンプレートcheckoutから導入先を指す形にすれば、忘れようがない。
 #
 # 使用法:
-#   install-harness.sh [--target <dir>] [--dry-run] [--force] [--verify-only]
+#   install-harness.sh [--target <dir>] [--profile bootstrap|strict] [--dry-run] [--force] [--verify-only]
+#
+# --profile:
+#   bootstrap（既定） 導入直後からharness-orchestration Skillをstartで起動でき、
+#                     PHASE-0 が進む。allowlist/write-scope-policy/progress.yamlの
+#                     鶏と卵を解いた最小構成。実装計画 quizzical-munching-origami 参照。
+#   strict            従来のfail-closed雛形。プロジェクト固有のパスをallowへ
+#                     書き込むまでBash・Writeがほぼ全deny。
 #
 # 終了コード:
 #   0  導入と検証に成功
@@ -38,23 +45,33 @@ SELF_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 TEMPLATES_DIR=$(CDPATH='' cd -- "$SELF_DIR/.." && pwd)
 
 TARGET_DIR=${PWD}
+PROFILE=bootstrap
 DRY_RUN=0
 FORCE=0
 VERIFY_ONLY=0
 
+usage_and_exit() {
+  printf 'usage: %s [--target <dir>] [--profile bootstrap|strict] [--dry-run] [--force] [--verify-only]\n' "$0" >&2
+  exit "$1"
+}
+
 while [ $# -gt 0 ]; do
   case $1 in
     --target)
-      [ $# -ge 2 ] || { printf 'usage: %s [--target <dir>] [--dry-run] [--force] [--verify-only]\n' "$0" >&2; exit 1; }
+      [ $# -ge 2 ] || usage_and_exit 1
       TARGET_DIR=$2
+      shift 2
+      ;;
+    --profile)
+      [ $# -ge 2 ] || usage_and_exit 1
+      PROFILE=$2
       shift 2
       ;;
     --dry-run)  DRY_RUN=1; shift ;;
     --force)    FORCE=1; shift ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
     -h|--help)
-      printf 'usage: %s [--target <dir>] [--dry-run] [--force] [--verify-only]\n' "$0"
-      exit 0
+      usage_and_exit 0
       ;;
     *)
       printf 'unknown argument: %s\n' "$1" >&2
@@ -62,6 +79,14 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+case $PROFILE in
+  bootstrap|strict) : ;;
+  *)
+    printf 'ERROR: 不正な --profile: %s（bootstrap または strict）\n' "$PROFILE" >&2
+    exit 1
+    ;;
+esac
 
 # 存在しないtargetは作らない。打ち間違えたパスに新しい木を生やさない。
 if [ ! -d "$TARGET_DIR" ]; then
@@ -205,6 +230,7 @@ trap tmp_cleanup EXIT HUP INT TERM
 # ---------------------------------------------------------------------------
 
 printf '導入先: %s\n' "$TARGET_DIR"
+printf 'プロファイル: %s\n' "$PROFILE"
 [ "$DRY_RUN" -eq 1 ] && printf '(--dry-run: 実際には書き込まない)\n'
 
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -226,16 +252,68 @@ done
 install_managed "$TEMPLATES_DIR/scripts/verify-harness-install.sh" \
   'scripts/verify-harness-install.sh'
 
-# 利用者所有の設定
-install_owned "$TEMPLATES_DIR/settings.json"       '.claude/settings.json'
-install_owned "$TEMPLATES_DIR/bash-allowlist"      '.claude/bash-allowlist'
-install_owned "$TEMPLATES_DIR/write-scope-policy"  '.claude/write-scope-policy'
+# 状態書込みラッパ（bootstrapプロファイルのallowlistが参照する専用コマンド）。
+# strictプロファイルでも配置する。ラッパ自体は害がなく、後日bootstrapへ
+# 切り替える際に揃っている方が移行が滑らかである。
+install_managed "$TEMPLATES_DIR/scripts/harness-state-write.sh" \
+  'scripts/harness-state-write.sh'
+
+# 利用者所有の設定。プロファイルにより配布元を切り替える。
+if [ "$PROFILE" = 'bootstrap' ]; then
+  install_owned "$TEMPLATES_DIR/settings.json"              '.claude/settings.json'
+  install_owned "$TEMPLATES_DIR/bootstrap/bash-allowlist"    '.claude/bash-allowlist'
+  install_owned "$TEMPLATES_DIR/bootstrap/write-scope-policy" '.claude/write-scope-policy'
+else
+  install_owned "$TEMPLATES_DIR/settings.json"       '.claude/settings.json'
+  install_owned "$TEMPLATES_DIR/bash-allowlist"      '.claude/bash-allowlist'
+  install_owned "$TEMPLATES_DIR/write-scope-policy"  '.claude/write-scope-policy'
+fi
 
 # ツリー
 install_tree 'agents'    '.claude/agents'
 install_tree 'rules'     '.claude/rules'
 install_tree 'skills'    '.claude/skills'
 install_tree 'workflows' '.claude/workflows'
+
+# ---------------------------------------------------------------------------
+# docsツリーのscaffold（bootstrapプロファイルのみ）。
+#
+# harness-orchestration Skill が start で PHASE-0 を進めるには、これらの
+# ディレクトリが最初から存在している必要がある。存在しない場合、
+# 最初のWriteが親ディレクトリの作成から始まり、write scope照合の
+# 対象パス解決（§3.6.1のcanonical path化）が複雑になる。
+# ---------------------------------------------------------------------------
+if [ "$PROFILE" = 'bootstrap' ] && [ "$DRY_RUN" -eq 0 ]; then
+  mkdir -p -- \
+    "$TARGET_DIR/docs/status/.staging" \
+    "$TARGET_DIR/docs/status/agent-runs" \
+    "$TARGET_DIR/docs/status/phase-runs" \
+    "$TARGET_DIR/docs/status/changes" \
+    "$TARGET_DIR/docs/project" \
+    "$TARGET_DIR/docs/context/manifests" \
+    "$TARGET_DIR/docs/features"
+
+  STAGING_GITIGNORE="$TARGET_DIR/docs/status/.staging/.gitignore"
+  if [ ! -e "$STAGING_GITIGNORE" ]; then
+    printf '*\n!.gitignore\n' > "$STAGING_GITIGNORE"
+    printf 'CREATE %s\n' 'docs/status/.staging/.gitignore'
+    CREATED=$((CREATED + 1))
+  fi
+
+  # progress.yaml は無い場合のみ種を配置する。既存のprogress.yamlを
+  # 上書きすると、進行中のプロジェクトの状態を破壊するため（Policy B相当）。
+  PROGRESS_DEST="$TARGET_DIR/docs/status/progress.yaml"
+  if [ ! -e "$PROGRESS_DEST" ]; then
+    HEAD_COMMIT=''
+    if git -C "$TARGET_DIR" rev-parse HEAD >/dev/null 2>&1; then
+      HEAD_COMMIT=$(git -C "$TARGET_DIR" rev-parse HEAD)
+    fi
+    sed -e "s|current_commit: \"\"|current_commit: \"${HEAD_COMMIT}\"|" \
+      "$TEMPLATES_DIR/bootstrap/progress.yaml" > "$PROGRESS_DEST"
+    printf 'CREATE %s\n' 'docs/status/progress.yaml（種）'
+    CREATED=$((CREATED + 1))
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # chmod は毎回無条件に適用する。
@@ -250,6 +328,7 @@ if [ "$DRY_RUN" -eq 0 ]; then
   for sh_file in "$TARGET_DIR/scripts/"verify-*.sh; do
     [ -f "$sh_file" ] && chmod +x "$sh_file"
   done
+  [ -f "$TARGET_DIR/scripts/harness-state-write.sh" ] && chmod +x "$TARGET_DIR/scripts/harness-state-write.sh"
 fi
 
 printf '\nCREATE %d件 / UPDATE %d件 / SKIP %d件\n' "$CREATED" "$UPDATED" "$SKIPPED"
@@ -274,10 +353,17 @@ if [ ! -x "$VERIFIER" ]; then
 fi
 
 if "$VERIFIER" --target "$TARGET_DIR"; then
-  printf '\n次の手順:\n'
-  printf '  1. .claude/bash-allowlist へ実際に使うコマンドを追記する（§16-2 の監査を経ること）\n'
-  printf '  2. .claude/write-scope-policy をプロジェクトの構成に合わせる\n'
-  printf '  3. docs/status/ に baseline.yaml と progress.yaml を用意し PHASE-0 を開始する\n'
+  if [ "$PROFILE" = 'bootstrap' ]; then
+    printf '\n次の手順:\n'
+    printf '  1. 今すぐ harness-orchestration Skill を start で起動できる。\n'
+    printf '  2. ビルド/テストコマンドは PHASE-0 の実測後、監査（§16-2）を経て .claude/bash-allowlist へ追記する。\n'
+    printf '  3. .claude/write-scope-policy をプロジェクトの構成に合わせて調整する。\n'
+  else
+    printf '\n次の手順:\n'
+    printf '  1. .claude/bash-allowlist へ実際に使うコマンドを追記する（§16-2 の監査を経ること）\n'
+    printf '  2. .claude/write-scope-policy をプロジェクトの構成に合わせる\n'
+    printf '  3. docs/status/ に baseline.yaml と progress.yaml を用意し PHASE-0 を開始する\n'
+  fi
   exit 0
 fi
 

@@ -87,11 +87,13 @@ Deterministic Guardrailの実装と、その導入・診断を行うスクリプ
 
 1. main/master以外のfeatureブランチを用意する。
 2. 既存の検証script、Hook、Runnerと推移的な呼出先をread-onlyで監査する。
-3. permissions、sandbox、Network既定deny、権限境界を設定する。Hook群は`bash <TEMPLATES>/scripts/install-harness.sh --target .`で導入する（冪等。`scripts/`の配置漏れと`chmod +x`忘れは**Bash・Write・Editの全deny**になるため、手作業のcpは推奨しない）。導入後は`bash scripts/verify-harness-install.sh --target .`で診断できる。
-4. 設計書のPhase 0に従って変更前baselineを採取する。
-5. `CLAUDE.md`、`progress.yaml`、最初のhandoff、context manifestを用意する。
+3. `bash <TEMPLATES>/scripts/install-harness.sh --target .`で導入する（冪等。既定は`--profile bootstrap`）。`scripts/`の配置漏れと`chmod +x`忘れは**Bash・Write・Editの全deny**になるため、手作業のcpは推奨しない。導入後は`bash scripts/verify-harness-install.sh --target .`で診断できる（FAIL 0件で成功）。
+4. 導入直後、`harness-orchestration` Skillを`start`で起動する。`docs/status/progress.yaml`の種（`current_task: PHASE-0`）が既に配置されているため、initializerへPHASE-0が委譲され、そのまま進められる。
+5. PHASE-0でプロジェクトの実際のビルド/テストコマンドを実測したら、推移的な呼出先まで確認する監査（§16-2）を経て`.claude/bash-allowlist`へ追記する。`.claude/write-scope-policy`もプロジェクトの構成に合わせて調整する。
 6. 現在工程に必要なAgentとSkillだけを用意し、品質ゲートをRunnerまたはHooksで強制する。
 7. 小さなタスクで一巡させ、Harness Evalsで再開性とゲート動作を確認する。
+
+進行中プロジェクトへの導入や、プロジェクト固有パスの単一Agent向けAllow構成を最初から用いたい場合は`--profile strict`を使う（従来のfail-closed雛形。導入直後はBash・Writeがほぼ全denyになるため、allowlist/write-scope-policy/progress.yamlを手動で用意してから開始する）。
 
 機能固有の要件・設計・テスト・レビュー・handoffは、原則`docs/features/<feature-id>/`へまとめます。共有規約と横断ADRだけを機能外へ置きます。ハーネス選択は[共通適用ガイド](../README.md)を参照してください。
 

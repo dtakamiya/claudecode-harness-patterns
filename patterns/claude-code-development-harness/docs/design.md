@@ -10,7 +10,7 @@
 |----------|----------------------------------------------------|
 | 対象     | Claude Codeを利用したシステム開発                  |
 | 対象工程 | 要件定義〜実装完了                                 |
-| 版       | Version 1.12 / 2026-07-25（要件書構成定義版） |
+| 版       | Version 1.13 / 2026-07-26（bootstrapプロファイル版） |
 
 # 1. 文書の目的
 
@@ -901,6 +901,7 @@ scripts/
 | `gate` | 記録済み証跡から現在Phaseのexit gateだけを判定する |
 | `start` | `progress.yaml`が存在しない場合に`initializer`でPHASE-0を開始する |
 
+- `install-harness.sh --profile bootstrap`（既定）で導入した直後は、`docs/status/progress.yaml`に`current_task: PHASE-0`、`bootstrap_seed: true`を持つ種が既に配置されている。この場合`start`は「存在しない」判定ではなく「`bootstrap_seed: true`かつ`current_phase_status: queued`」を初期化未開始とみなし、同じく`initializer`へPHASE-0を委譲する。`bootstrap_seed`フィールドはinitializerが最初の実`progress.yaml`更新（`./scripts/harness-state-write.sh progress`経由）で除去する。
 - `start`を除く全モードで、`progress.yaml`、`current_phase_run_ref`のPhaseRun、最新handoff、Git状態、`harness-capabilities.yaml`を読んでから判断する。**会話履歴から現在地を推定しない**（§2 成果物主義）。
 - Git状態と`progress.yaml.current_commit`が一致しない場合はblockingとして停止し、工程を進めない。
 
@@ -1851,9 +1852,14 @@ RunnerはAgentの自然言語による完了宣言を信用せず、終了コー
 
 # 16. 導入ステップ
 
+`install-harness.sh`は`--profile bootstrap`（既定）と`--profile strict`の2プロファイルを持つ。以下の手順は主にstrictプロファイル、または実プロジェクトへの本格適用を前提とした記述である。
+
+- **bootstrapプロファイル**は、導入直後から`harness-orchestration` Skillを`start`で起動でき、`initializer`（手順4）へPHASE-0が委譲される最小構成をあらかじめ配置する。`.claude/bash-allowlist`は`./scripts/harness-state-write.sh`と`git`のみ、`.claude/write-scope-policy`は`docs/status/.staging/**`等の最小範囲のみを許可し、`docs/status/progress.yaml`には`current_task: PHASE-0`、`bootstrap_seed: true`の種があらかじめ配置される。プロジェクト固有のビルド/テストコマンド（手順3）とWrite範囲の具体化（手順3, 6）は、PHASE-0の実測後、監査を経て追記する。
+- **strictプロファイル**は以下の手順1〜3を導入前に人手で完了させることを前提とする、従来のfail-closed雛形である。
+
 1. git状態を確認し、main/masterでは書込みを止める。既存作業を保護し、事前許可された命名規則でfeatureブランチを作成して開始時SHAを記録する。個別承認が必要なリスク条件ではHuman Gateを先に通す。
 2. 既存の検証script、Hook、Runnerと推移的な呼出先をread-onlyで監査し、外部通信、secret参照、危険操作、対象外書込みがないことを確認する。確認できないコマンドは実行しない。
-3. `CLAUDE.md`、`docs/project`、permissions、sandbox、Network既定deny、権限境界、禁止操作を定義し、監査済みコマンドだけをallowlistへ登録する。
+3. `CLAUDE.md`、`docs/project`、permissions、sandbox、Network既定deny、権限境界、禁止操作を定義し、監査済みコマンドだけをallowlistへ登録する。bootstrapプロファイルではこの手順をPHASE-0実測後まで遅延できる。
 4. `initializer`を作成し、production code変更前にリポジトリ構造、ビルド、UT、IT、静的解析を実行してコマンド、終了コード、開始時SHAを`baseline.yaml`へ記録する。
 5. `progress.yaml`、`baseline.yaml`、ハンドオフ、context manifestのテンプレートを作成する。
 6. 要件定義、設計、実装、レビューの最小ワークフローを作成する。
@@ -2268,6 +2274,50 @@ review:
   production_condition:
     - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
     - 文書整合性検証をCIで継続実行する
+```
+
+# 付録P. Version 1.13変更点
+
+Version 1.13は、**まっさら導入直後にハーネスが構造的にデッドロックする**という欠落を修正する。`install-harness.sh`をテンプレートのまま新規プロジェクトへ導入しても、Bash allowlistの実効行が0（全行コメント）、write-scope-policyのallowが導入先に存在しないパス限定、`progress.yaml`がpermissions.denyとwrite-scope-policyの二重denyで作成不能、という状態が重なり、`harness-orchestration` Skillを`start`しても`initializer`へPHASE-0を委譲できなかった。診断スクリプトはこの状態をWARNとして扱い、exit 0を返していたため、「導入成功、ただし全deny」が正常終了として報告されていた。
+
+## P.1 変更点
+
+- **`install-harness.sh`へ`--profile bootstrap|strict`を新設（既定`bootstrap`）。** bootstrapプロファイルは、導入直後から`harness-orchestration` Skillを`start`で起動でき`initializer`へPHASE-0が委譲される最小構成（allowlist、write-scope-policy、`progress.yaml`の種、`docs/status/`配下のscaffold）をあらかじめ配置する。strictプロファイルは従来のfail-closed雛形として維持する。§16へ両プロファイルの位置付けを追記した。
+- **`scripts/harness-state-write.sh`を新設。** `docs/status/progress.yaml`等はpermissions.denyとwrite-scope-policyで二重にdenyされたままであり、通常のWriteツールでは確定できない。本ラッパはargv[0]の完全一致でallowlistへ載る専用コマンドとし、`docs/status/.staging/`配下へ書かれたステージングファイルを検証（revisionの整合、必須fieldの存在、識別子のtraversal拒否、symlink拒否）してからatomic renameで確定する。確定先は`progress.yaml`、`phase-runs/<id>.yaml`、`features/<id>/handoffs/<name>.md`のみで、`docs/status/gate-runs/**`は確定先に含まれない（信頼済みRunnerの領分を維持）。
+- **`§5.-1`の`start`モードへ、種の`progress.yaml`（`bootstrap_seed: true`）がある場合の挙動を補足。** `progress.yaml`が存在しない場合と同様に`initializer`へPHASE-0を委譲する。
+- **hooksの4つの不具合を修正。**
+  - `pre-tool-use.sh`: `HARNESS_SCRATCH_DIR`未設定時のフォールバック先を、存在しないパスから`${TMPDIR:-/tmp}/harness-scratch-<project-basename>`（`mkdir -p`する）へ変更。従来は存在しないパスへフォールバックしており、リダイレクトを含むBashコマンドが常にdenyされていた。
+  - `pre-tool-use.sh`: `NotebookEdit`の`file_path`が空の場合、`notebook_path`へフォールバックするよう修正。`NotebookEdit`の入力フィールドは`notebook_path`であり、従来は必ずdenyされていた。
+  - `subagent-stop.sh`: `SubagentStop`のイベントJSONにはサブエージェントの種類を特定できるフィールドが無い（公式スキーマ未定義）ため、`docs/status/.staging/expected-agent-run`のmarker方式へ変更。委譲側がagent-run成果物を期待するサブエージェントを起動する前だけmarkerを置き、本hookはmarkerが存在する場合だけ検査する。marker手順は`references/delegation.md`へ追記した。
+  - `post-tool-use.sh`: secret scanが`*.example`、`docs/**`、明白なプレースホルダ（`xxx`、`changeme`、`<...>`、`${...}`）で誤爆していたため、これらを検査対象から除外した。
+- **`settings.json`へ`permissions.allow`を新設。** `Read`/`Glob`/`Grep`/`Task`を無条件allowとする。読み取り・委譲のみで書込みを伴わないため安全側であり、Bash・Writeは引き続き人の承認とHook判定を経由させる。
+- **`verify-harness-install.sh`をbootstrap対応に修正。** bootstrapプロファイル（allowlistに`./scripts/harness-state-write.sh`の実効行がある）では、allowlist実効行0・write-scope-policyのプレースホルダ残存をWARNからFAILへ格上げした。`for cmd_path in $COMMAND_PATHS`の未クォート展開（プロジェクトパスに空白があると誤FAILする）を修正した。スモークテストを3本（Bash疎通、Write疎通、状態書込みの成功）拡張した。
+- **`docs/context/manifests/**`をwrite-scope-policyでdeny→allowへ反転（bootstrapプロファイルのみ）。** 単一policyで全Agentを表現する限界として、Context Builder以外への分岐ができないため、denyのままではContext Builder自身が成果物を出力できず`ACCESS_POLICY`ゲートを構造的に満たせない。`templates/rules/permissions.md`へこの限界を追記した。
+
+## P.2 影響範囲
+
+既存のstrictプロファイル利用者への破壊的変更はない。`install-harness.sh`の既定プロファイルがbootstrapへ変わるため、strictプロファイルを前提とした既存導入を再実行する場合は`--profile strict`を明示する必要がある。hooksの4修正はbootstrap/strict両プロファイルへ適用され、従来のfalse denyを解消する方向にのみ作用する。
+
+## P.3 判定
+
+```yaml
+review:
+  target_version: 1.13
+  supported_modes:
+    full: production_candidate
+    compatible_no_hooks: production_candidate
+    manual: poc_only
+  document_consistency: passed
+  runtime_evidence: pending
+  result: PASS_FOR_POC
+  production_condition:
+    - Version 1.5で定義したCapability ProfileのE2E条件をすべて満たす
+    - 文書整合性検証をCIで継続実行する
+    - §3.6.3の実行時作業領域と§3.6.4の隔離実行環境が、強制側で実装済みであること
+    - §3.6.5のBrowser / Preview供給が、UI変更を扱うプロジェクトで実装済みであること
+    - §5.-1の起動経路が、経路Aまたは経路Bのいずれかで確立済みであること
+    - §5.1.2の必須節検査が、機械判定として実装済みであること
+    - bootstrapプロファイルのAgent単位write scope分岐が、Agent単位の強制が必要な運用で実装済みであること
 ```
 
 # 付録O. Version 1.12変更点

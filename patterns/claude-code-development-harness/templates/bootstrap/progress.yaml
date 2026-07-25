@@ -1,0 +1,10 @@
+revision: 1
+expected_previous_revision: 0
+current_phase_id: PHASE-0
+current_phase_status: queued
+current_task: PHASE-0
+current_commit: ""
+current_phase_run_ref: ""
+blocking_issues: []
+next_action: "harness-orchestration Skill を start で起動し、initializer へ PHASE-0 を委譲する"
+bootstrap_seed: true

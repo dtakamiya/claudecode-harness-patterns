@@ -28,6 +28,14 @@ Pass artifact **paths**, never pasted artifact bodies. The subagent reads its ow
 
 Never expand the subagent's permissions through the delegation prompt. The effective permission set is the intersection of the agent definition, the Skill, the context manifest, and runtime permissions/sandbox (design §3.4.1 実行規則3).
 
+### expected-agent-run marker
+
+`SubagentStop`'s event JSON carries no field identifying which kind of subagent just finished (no `agent_type` in the documented schema). The hook can't tell an agent-run-producing delegate apart from an exploratory or review subagent by itself.
+
+Before delegating to any specialist agent that is expected to write an `agent-run` artifact (Generator, Evaluator, Auditor, etc.), write the current task ID as a single line to `docs/status/.staging/expected-agent-run`. `subagent-stop.sh` checks that marker: present → it verifies the agent-run artifact against `current_task`; absent → it exits 0 without checking. The hook consumes (deletes) the marker on the subagent's `SubagentStop`, regardless of outcome, so it never leaks into the next delegation.
+
+Do not set the marker before delegating to a read-only exploration or code-review subagent — doing so would make an unrelated subagent's exit fail the check.
+
 ## Verify the result
 
 When the subagent returns, verify its artifact under `docs/status/agent-runs/` before believing it.

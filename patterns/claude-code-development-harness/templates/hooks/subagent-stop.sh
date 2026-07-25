@@ -24,6 +24,20 @@
 # 本Hookを通ったことを「工程が完了した」根拠にしない。
 #
 # 終了コード2でAgentの終了をブロックし、不足を差し戻す。
+#
+# --- marker方式（実装計画 quizzical-munching-origami §4）---
+#
+# SubagentStopのイベントJSONには、起動されたサブエージェントの種類や名前を
+# 特定できるフィールドが無い（公式スキーマ未定義。session_id / transcript_path /
+# cwd / hook_event_name のみ）。そのため本Hookはmatcher無しで全サブエージェントに
+# 掛かり、agent-runを書かない探索用・レビュー用サブエージェントも含めて
+# 一律に検査すると、無関係なサブエージェントまで必ずexit 2になる。
+#
+# 委譲側（Development Orchestrator等）が、agent-run成果物を書く前提の
+# サブエージェントを起動するときだけ docs/status/.staging/expected-agent-run に
+# marker（1行: 期待するtask id）を置く。本Hookはmarkerが存在するときだけ検査し、
+# 存在しなければ検査対象外として終了する。marker自体は使い捨てとし、
+# 検査後（結果によらず）削除する。手順は delegation.md を参照。
 
 set -eu
 
@@ -32,6 +46,14 @@ PROJECT_DIR=${CLAUDE_PROJECT_DIR:-$(CDPATH='' cd -- "$HOOK_DIR/../.." && pwd)}
 
 PROGRESS_FILE="$PROJECT_DIR/docs/status/progress.yaml"
 AGENT_RUNS_DIR="$PROJECT_DIR/docs/status/agent-runs"
+EXPECTED_MARKER="$PROJECT_DIR/docs/status/.staging/expected-agent-run"
+
+# markerが無いサブエージェント終了は検査対象外（探索・レビュー用など）。
+[ -f "$EXPECTED_MARKER" ] || exit 0
+
+# markerは使い捨て。検査の成否によらずここで消費する。
+MARKER_TASK=$(head -n 1 -- "$EXPECTED_MARKER" 2>/dev/null || true)
+rm -f -- "$EXPECTED_MARKER"
 
 # progress.yamlが無い段階（PHASE-0の初期化前）は検査対象外とする。
 [ -f "$PROGRESS_FILE" ] || exit 0
@@ -48,6 +70,13 @@ CURRENT_TASK=$(
 
 # current_taskが未確定なら、どのagent-runを期待すべきか決まらない。
 [ -n "$CURRENT_TASK" ] || exit 0
+
+# markerに記載されたtaskがcurrent_taskと異なる場合、委譲時点から
+# progress.yamlが進んでしまっている。古い期待値で検査しても意味がないため
+# 検査対象外とする（fail-closedではなく、単に判定不能として抜ける）。
+if [ -n "$MARKER_TASK" ] && [ "$MARKER_TASK" != "$CURRENT_TASK" ]; then
+  exit 0
+fi
 
 TASK_RUN_DIR="$AGENT_RUNS_DIR/$CURRENT_TASK"
 

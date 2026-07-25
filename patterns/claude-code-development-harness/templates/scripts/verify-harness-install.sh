@@ -138,26 +138,43 @@ require_file '.claude/settings.json' \
   'hooksが登録されず、guardrailが一切起動しない'
 
 # ---------------------------------------------------------------------------
-# 4. 設定ファイルの中身が雛形のままでないか（WARN）
+# 4. 設定ファイルの中身が雛形のままでないか
 #
-# §16-2 の監査前は正当な中間状態でありうるためハード失敗にはしない。
-# ただし名指しで報告する。allowlistが空の状態は、症状としては
-# 「hookが未設置」と全く同じ「全コマンドdeny」になるため。
+# bootstrapプロファイル（.claude/bash-allowlist に
+# ./scripts/harness-state-write.sh の実効行がある）では、allowlist実効行0や
+# プレースホルダ残存は「導入成功、ただし全deny」を正常終了として報告する
+# ことになるため、WARNではなくFAILとして扱う。
+#
+# strictプロファイルでは、§16-2の監査前の正当な中間状態でありうるため
+# 従来どおりWARNのままとする。
 # ---------------------------------------------------------------------------
 
 ALLOWLIST="$TARGET_DIR/.claude/bash-allowlist"
+IS_BOOTSTRAP_PROFILE=0
+if [ -f "$ALLOWLIST" ] && grep -Fxq './scripts/harness-state-write.sh' "$ALLOWLIST"; then
+  IS_BOOTSTRAP_PROFILE=1
+fi
+
 if [ -f "$ALLOWLIST" ]; then
   # コメントと空行を除いた実効行を数える
   ENTRY_COUNT=$(grep -cv -E '^[[:space:]]*(#|$)' "$ALLOWLIST" || true)
   if [ "$ENTRY_COUNT" -eq 0 ]; then
-    warn '.claude/bash-allowlist に実効行が無い（全行コメント）→ 全てのBashコマンドがALLOWLIST_MISSで拒否される。雛形のままでは使えない（§16-2）'
+    if [ "$IS_BOOTSTRAP_PROFILE" -eq 1 ]; then
+      fail '.claude/bash-allowlist に実効行が無い（全行コメント）→ 全てのBashコマンドがALLOWLIST_MISSで拒否される。bootstrapプロファイルの種が壊れている'
+    else
+      warn '.claude/bash-allowlist に実効行が無い（全行コメント）→ 全てのBashコマンドがALLOWLIST_MISSで拒否される。雛形のままでは使えない（§16-2）'
+    fi
   fi
 fi
 
 POLICY="$TARGET_DIR/.claude/write-scope-policy"
 if [ -f "$POLICY" ]; then
   if grep -q 'com/example/order' "$POLICY"; then
-    warn '.claude/write-scope-policy に雛形のプレースホルダ（com/example/order）が残っている → 実プロジェクトの構成へ置き換えが必要'
+    if [ "$IS_BOOTSTRAP_PROFILE" -eq 1 ]; then
+      fail '.claude/write-scope-policy に雛形のプレースホルダ（com/example/order）が残っている → bootstrapプロファイルの種が壊れている'
+    else
+      warn '.claude/write-scope-policy に雛形のプレースホルダ（com/example/order）が残っている → 実プロジェクトの構成へ置き換えが必要'
+    fi
   fi
 fi
 
@@ -181,7 +198,15 @@ if [ -f "$SETTINGS" ]; then
       }
     }' "$SETTINGS" || true)
 
+  # COMMAND_PATHS は改行区切りの複数行文字列であり、プロジェクトパスに
+  # 空白を含む場合がある。単語分割（IFS=空白）で走査すると1パスが
+  # 複数トークンに割れて誤FAILする。改行だけをセパレータにする。
+  OLD_IFS=$IFS
+  IFS='
+'
   for cmd_path in $COMMAND_PATHS; do
+    IFS=$OLD_IFS
+    [ -n "$cmd_path" ] || continue
     # ${CLAUDE_PROJECT_DIR} と $CLAUDE_PROJECT_DIR の両表記を展開
     resolved=$(printf '%s' "$cmd_path" \
       | sed -e "s|\${CLAUDE_PROJECT_DIR}|$TARGET_DIR|g" \
@@ -193,7 +218,10 @@ if [ -f "$SETTINGS" ]; then
     if [ ! -x "$resolved" ]; then
       fail "settings.json が参照する hook が実行できない: $cmd_path"
     fi
+    IFS='
+'
   done
+  IFS=$OLD_IFS
 fi
 
 # ---------------------------------------------------------------------------
@@ -208,9 +236,18 @@ fi
 # ---------------------------------------------------------------------------
 
 HOOK="$TARGET_DIR/.claude/hooks/pre-tool-use.sh"
-if [ "$FAIL_COUNT" -eq 0 ] && [ -x "$HOOK" ] && [ -f "$ALLOWLIST" ]; then
-  SMOKE_CMD=$(grep -v -E '^[[:space:]]*(#|$)' "$ALLOWLIST" 2>/dev/null | head -n 1 || true)
 
+# bootstrapプロファイルでは harness-state-write.sh 用の専用スモークを使う
+# （後述）。汎用スモークはそれ以外のコマンド（strictプロファイルで
+# 追記されたビルド/テストコマンド等）を対象とする。
+if [ "$IS_BOOTSTRAP_PROFILE" -eq 1 ] && [ -f "$ALLOWLIST" ]; then
+  SMOKE_CMD=$(grep -v -E '^[[:space:]]*(#|$)' "$ALLOWLIST" 2>/dev/null \
+    | grep -v -F './scripts/harness-state-write.sh' | head -n 1 || true)
+else
+  SMOKE_CMD=$(grep -v -E '^[[:space:]]*(#|$)' "$ALLOWLIST" 2>/dev/null | head -n 1 || true)
+fi
+
+if [ "$FAIL_COUNT" -eq 0 ] && [ -x "$HOOK" ] && [ -f "$ALLOWLIST" ]; then
   if [ -n "$SMOKE_CMD" ]; then
     SMOKE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/harness-smoke.XXXXXX") || exit 2
     smoke_cleanup() {
@@ -254,6 +291,99 @@ if [ "$FAIL_COUNT" -eq 0 ] && [ -x "$HOOK" ] && [ -f "$ALLOWLIST" ]; then
         fail "疎通確認: 想定外のpermissionDecision: $DECISION"
         ;;
     esac
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 7. bootstrapプロファイル専用スモーク（実装計画 quizzical-munching-origami §6）
+#
+# 「導入直後にharness-orchestration Skillをstartで起動でき、PHASE-0が進む」
+# ことをend-to-endで見る。個々のファイルが揃っていても、この3点のどれかが
+# 壊れていれば鶏と卵は解けていない。
+# ---------------------------------------------------------------------------
+
+smoke_permission_decision() {
+  # $1: HOOKへ渡すevent JSON, $2: 追加の環境変数（"NAME=value" 形式、無ければ空）
+  smoke_out=$(
+    if [ -n "$2" ]; then
+      env "$2" CLAUDE_PROJECT_DIR="$TARGET_DIR" "$HOOK"
+    else
+      CLAUDE_PROJECT_DIR="$TARGET_DIR" "$HOOK"
+    fi <<SMOKE_EOF
+$1
+SMOKE_EOF
+  ) || true
+  LC_ALL=C awk '
+    BEGIN { RS = "\0" }
+    {
+      idx = index($0, "\"permissionDecision\"")
+      if (idx == 0) { print "NO_DECISION"; exit }
+      rest = substr($0, idx + length("\"permissionDecision\""))
+      if (match(rest, /"[a-z]+"/)) {
+        print substr(rest, RSTART + 1, RLENGTH - 2)
+      } else { print "UNPARSEABLE" }
+    }' <<SMOKE_EOF
+$smoke_out
+SMOKE_EOF
+}
+
+if [ "$FAIL_COUNT" -eq 0 ] && [ "$IS_BOOTSTRAP_PROFILE" -eq 1 ] && [ -x "$HOOK" ]; then
+  BOOTSTRAP_SMOKE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/harness-bootstrap-smoke.XXXXXX") || exit 2
+  bootstrap_smoke_cleanup() {
+    rm -rf -- "$BOOTSTRAP_SMOKE_TMP"
+  }
+  trap bootstrap_smoke_cleanup EXIT HUP INT TERM
+
+  # 7a. Bash: ./scripts/harness-state-write.sh が defer を返す
+  DECISION=$(smoke_permission_decision \
+    '{"tool_name":"Bash","tool_input":{"command":"./scripts/harness-state-write.sh progress"}}' \
+    "HARNESS_SCRATCH_DIR=$BOOTSTRAP_SMOKE_TMP")
+  if [ "$DECISION" != 'defer' ]; then
+    fail "疎通確認(bootstrap): ./scripts/harness-state-write.sh がdeferを返さない（応答: $DECISION）"
+  fi
+
+  # 7b. Write: docs/features/x/y.md が defer、docs/status/progress.yaml が deny
+  DECISION=$(smoke_permission_decision \
+    "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TARGET_DIR/docs/features/x/y.md\"}}" '')
+  if [ "$DECISION" != 'defer' ]; then
+    fail "疎通確認(bootstrap): docs/features/x/y.md へのWriteがdeferを返さない（応答: $DECISION）"
+  fi
+
+  DECISION=$(smoke_permission_decision \
+    "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TARGET_DIR/docs/status/progress.yaml\"}}" '')
+  if [ "$DECISION" != 'deny' ]; then
+    fail "疎通確認(bootstrap): docs/status/progress.yaml へのWriteがdenyされない（応答: $DECISION）。single writer原則が破られている"
+  fi
+
+  # 7c. 状態書込み: ステージング経由の progress.yaml 確定が成功する
+  #
+  # 実際のprogress.yamlを書き換えないよう、隔離した一時repoで検証する。
+  STATE_WRITE="$TARGET_DIR/scripts/harness-state-write.sh"
+  if [ -x "$STATE_WRITE" ] && [ -f "$TARGET_DIR/docs/status/progress.yaml" ]; then
+    STATE_TMP="$BOOTSTRAP_SMOKE_TMP/state-write-check"
+    mkdir -p -- "$STATE_TMP/docs/status/.staging" "$STATE_TMP/docs/status"
+
+    EXISTING_REVISION=$(
+      LC_ALL=C awk '/^revision:[ \t]*/ { sub(/^revision:[ \t]*/, ""); gsub(/[ \t\r]+$/, ""); print; exit }' \
+        "$TARGET_DIR/docs/status/progress.yaml"
+    )
+    cp -- "$TARGET_DIR/docs/status/progress.yaml" "$STATE_TMP/docs/status/progress.yaml"
+
+    NEXT_REVISION=$((EXISTING_REVISION + 1))
+    {
+      printf 'revision: %s\n' "$NEXT_REVISION"
+      printf 'expected_previous_revision: %s\n' "$EXISTING_REVISION"
+      printf 'current_task: PHASE-0\n'
+      printf 'next_action: "smoke test"\n'
+      printf 'blocking_issues: []\n'
+    } > "$STATE_TMP/docs/status/.staging/progress.yaml"
+
+    if CLAUDE_PROJECT_DIR="$STATE_TMP" "$STATE_WRITE" progress >/dev/null 2>"$BOOTSTRAP_SMOKE_TMP/state-write-err"; then
+      :
+    else
+      STATE_ERR=$(tr -d '\n' < "$BOOTSTRAP_SMOKE_TMP/state-write-err" | cut -c1-300)
+      fail "疎通確認(bootstrap): harness-state-write.sh progress がステージング経由で確定できない: $STATE_ERR"
+    fi
   fi
 fi
 

@@ -194,9 +194,13 @@ if [ "$TOOL_NAME" = 'Bash' ]; then
   # 実行時作業領域（設計書 §3.6.3）。リポジトリ外の使い捨て領域を渡す。
   WRITABLE_ROOT=${HARNESS_SCRATCH_DIR:-}
   if [ -z "$WRITABLE_ROOT" ] || [ ! -d "$WRITABLE_ROOT" ]; then
-    # scratchが未設定の場合、リダイレクトを含むコマンドは判定できない。
-    # 通さずに差し戻す（設計書 §3.6.3: 判定できない場合は拒否）。
-    WRITABLE_ROOT="$PROJECT_DIR/.harness-scratch-unset"
+    # HARNESS_SCRATCH_DIR未設定時のフォールバック。存在しないパスへ
+    # フォールバックすると、リダイレクトを含むコマンドが常にdenyされる
+    # （§3.6.3の要件はリポジトリ外の使い捨て領域であって「存在しないパス」ではない）。
+    # プロジェクトのbasenameで領域を分け、他プロジェクトのscratchと混在しないようにする。
+    PROJECT_BASENAME=$(basename -- "$PROJECT_DIR")
+    WRITABLE_ROOT="${TMPDIR:-/tmp}/harness-scratch-${PROJECT_BASENAME}"
+    mkdir -p -- "$WRITABLE_ROOT" 2>/dev/null || WRITABLE_ROOT="$PROJECT_DIR/.harness-scratch-unset"
   fi
 
   if verify_output=$("$SCRIPTS_DIR/verify-bash-command.sh" \
@@ -215,6 +219,12 @@ fi
 # ---------------------------------------------------------------------------
 
 FILE_PATH=$(json_string_field 'file_path')
+
+# NotebookEditの入力フィールドは notebook_path であり file_path ではない。
+# file_pathへフォールバックしないと NotebookEdit は常に空を拾い必ずdenyされる。
+if [ "$TOOL_NAME" = 'NotebookEdit' ] && [ -z "$FILE_PATH" ]; then
+  FILE_PATH=$(json_string_field 'notebook_path')
+fi
 
 [ "$FILE_PATH" != '__NON_ASCII_ESCAPE__' ] \
   || deny 'file_pathに復元できないエスケープが含まれ、判定できない（fail-closed）'

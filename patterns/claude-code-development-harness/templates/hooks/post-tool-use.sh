@@ -90,6 +90,22 @@ esac
 [ -f "$ABSOLUTE_PATH" ] || exit 0
 
 # ---------------------------------------------------------------------------
+# 誤爆除外（*.example、docs/**、明白なプレースホルダ）
+#
+# .env.example やテストフィクスチャ、ドキュメント中のサンプル値は
+# 実際の秘密情報ではない。これらをsecret scanの対象から外さないと
+# 誤検知でtaskが常にFAILし、検出そのものが信頼されなくなる。
+# ---------------------------------------------------------------------------
+
+RELATIVE_FILE_PATH=${ABSOLUTE_PATH#"$PROJECT_DIR"/}
+
+case $RELATIVE_FILE_PATH in
+  *.example|docs/*)
+    exit 0
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
 # 1. secret scan（設計書 §3.5 Detective / Recovery）
 #
 # 検出時は終了コード2でブロックし、復旧を促す。設計書 §3.5 Recovery行は
@@ -99,6 +115,10 @@ esac
 # 単語境界 `\y` はGNU awkの拡張であり、macOS標準のawkでは
 # マッチせず**検出漏れになる**。移植性のため使用しない。
 # 同様に `\x27` も避け、シングルクォートは文字クラスで表現する。
+#
+# プレースホルダ（xxx, changeme, <...>, ${...}）は明白なダミー値であり
+# 誤検知の主要因になるため、資格情報っぽい行にヒットしても
+# プレースホルダと判定できる場合は除外する。
 SECRET_HIT=$(
   LC_ALL=C awk '
     # 代表的な秘密情報の形。プロジェクトの実態に合わせて追加すること。
@@ -108,6 +128,10 @@ SECRET_HIT=$(
     /xox[baprs]-[A-Za-z0-9-]{10,}/           { print "Slack token"; exit }
     /sk-[A-Za-z0-9]{32,}/                    { print "OpenAI-style API key"; exit }
     /(password|passwd|secret|api[_-]?key|token)[ \t]*[:=][ \t]*["'"'"'][^"'"'"']{8,}["'"'"']/ {
+      line = $0
+      if (line ~ /(xxx|XXX|changeme|CHANGEME|change_me|CHANGE_ME)/) next
+      if (line ~ /<[A-Za-z0-9_-]+>/) next
+      if (line ~ /\$\{[A-Za-z0-9_]+\}/) next
       print "hardcoded credential"; exit
     }
   ' "$ABSOLUTE_PATH" 2>/dev/null || true

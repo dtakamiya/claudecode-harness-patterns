@@ -21,7 +21,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$PROJECT/.claude/hooks" "$PROJECT/docs/status/agent-runs/TASK-004"
+mkdir -p "$PROJECT/.claude/hooks" "$PROJECT/docs/status/agent-runs/TASK-004" "$PROJECT/docs/status/.staging"
 cp "$TEMPLATES/subagent-stop.sh" "$TEMPLATES/stop-gate.sh" "$PROJECT/.claude/hooks/"
 chmod +x "$PROJECT/.claude/hooks/"*.sh
 
@@ -29,11 +29,20 @@ SUBAGENT_HOOK="$PROJECT/.claude/hooks/subagent-stop.sh"
 STOP_HOOK="$PROJECT/.claude/hooks/stop-gate.sh"
 RUN_DIR="$PROJECT/docs/status/agent-runs/TASK-004"
 PROGRESS="$PROJECT/docs/status/progress.yaml"
+EXPECTED_MARKER="$PROJECT/docs/status/.staging/expected-agent-run"
 
 FAILURES=0
 
 # $1: ラベル, $2: hookパス, $3: 期待exit(0 or 2)
+#
+# subagent-stop.sh はmarker方式（実装計画 quizzical-munching-origami §4）。
+# expected-agent-run markerが無いと検査自体をスキップしてexit 0を返すため、
+# subagent-stop.shを対象とするケースだけmarkerを置いてから呼ぶ。
+# markerはhook自身が消費（削除）するので毎回置き直す。
 assert_exit() {
+  if [ "$2" = "$SUBAGENT_HOOK" ]; then
+    printf 'TASK-004\n' > "$EXPECTED_MARKER"
+  fi
   set +e
   printf '{}' | CLAUDE_PROJECT_DIR="$PROJECT" "$2" > "$WORK_DIR/out" 2>"$WORK_DIR/err"
   actual=$?
