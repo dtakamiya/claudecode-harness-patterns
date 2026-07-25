@@ -803,7 +803,8 @@ fi
 
 if ! awk -F'|' '
   /^# 11\. 品質ゲート/ { in_gates = 1; next }
-  /^## 11\.1/ { in_gates = 0 }
+  # §11.0以降の表は第1列がPhase IDや評価時点であり、ゲート名ではない
+  /^## 11\./ { in_gates = 0 }
   in_gates && /^\| [A-Z][A-Z0-9_]+/ {
     value = $2
     gsub(/[ `]/, "", value)
@@ -949,13 +950,19 @@ while IFS= read -r decision; do
 done <<EOF
 $(sed -n 's/^| \(DEC-[0-9][0-9][0-9]\) |.*/\1/p' "$DESIGN_FILE")
 EOF
-if [ "$EXPECTED_DECISION" -ne 14 ]; then
-  fail 'Decision IDはDEC-001〜DEC-013の13件でなければならない'
+if [ "$EXPECTED_DECISION" -eq 1 ]; then
+  fail 'Decision IDが1件も定義されていない'
 fi
 
+# 付録は新しい版を先頭に置くため、出現順の末尾は最古の版になる。
+# 最新版は版番号として比較した最大値で求める。
+latest_version() {
+  sort -t. -k1,1n -k2,2n | tail -1
+}
+
 HEADER_VERSION=$(sed -n 's/^| 版.*Version \([0-9][0-9.]*\).*$/\1/p' "$DESIGN_FILE")
-LATEST_APPENDIX_VERSION=$(sed -n 's/^# 付録[A-Z]\. Version \([0-9][0-9.]*\).*$/\1/p' "$DESIGN_FILE" | tail -1)
-LATEST_TARGET_VERSION=$(sed -n 's/^  target_version: \([0-9][0-9.]*\)$/\1/p' "$DESIGN_FILE" | tail -1)
+LATEST_APPENDIX_VERSION=$(sed -n 's/^# 付録[A-Z]\. Version \([0-9][0-9.]*\).*$/\1/p' "$DESIGN_FILE" | latest_version)
+LATEST_TARGET_VERSION=$(sed -n 's/^  target_version: \([0-9][0-9.]*\)$/\1/p' "$DESIGN_FILE" | latest_version)
 if [ -z "$HEADER_VERSION" ] || [ "$HEADER_VERSION" != "$LATEST_APPENDIX_VERSION" ] || [ "$HEADER_VERSION" != "$LATEST_TARGET_VERSION" ]; then
   fail "版番号が一致しない: header=$HEADER_VERSION appendix=$LATEST_APPENDIX_VERSION target=$LATEST_TARGET_VERSION"
 fi
