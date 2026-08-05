@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="スクラムチームにおけるAI駆動開発ハーネスのバージョンアップ・改善・リリース・ロールバック運用ルール">
+  <title>スクラムチーム AIハーネス運用・改善ガイド</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-2: #eef3f9;
+      --text: #172033;
+      --muted: #5d687a;
+      --line: #dbe2ec;
+      --primary: #2457d6;
+      --primary-2: #173b91;
+      --accent: #0f8b7b;
+      --warning: #b46a00;
+      --danger: #b42318;
+      --success: #18794e;
+      --shadow: 0 12px 32px rgba(23, 32, 51, .08);
+      --radius: 18px;
+      --max: 1180px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0f1420;
+      --surface: #171e2d;
+      --surface-2: #20293a;
+      --text: #edf2ff;
+      --muted: #aeb9cc;
+      --line: #33405a;
+      --primary: #7da2ff;
+      --primary-2: #b1c5ff;
+      --accent: #62d1c1;
+      --warning: #f3ba62;
+      --danger: #ff8e85;
+      --success: #6ed6a4;
+      --shadow: 0 12px 34px rgba(0,0,0,.28);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(36,87,214,.10), transparent 31rem),
+        radial-gradient(circle at 92% 8%, rgba(15,139,123,.08), transparent 28rem),
+        var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN",
+        "Yu Gothic", Meiryo, sans-serif;
+      line-height: 1.75;
+    }
+
+    a { color: var(--primary); text-underline-offset: 3px; }
+    button { font: inherit; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      background: color-mix(in srgb, var(--bg) 85%, transparent);
+      backdrop-filter: blur(14px);
+    }
+
+    .topbar-inner {
+      width: min(var(--max), calc(100% - 32px));
+      margin: 0 auto;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: .02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      box-shadow: 0 6px 16px rgba(36,87,214,.24);
+    }
+
+    .toolbar { display: flex; gap: 8px; }
+    .icon-btn {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 7px 11px;
+      cursor: pointer;
+    }
+    .icon-btn:hover { border-color: var(--primary); }
+
+    .hero {
+      width: min(var(--max), calc(100% - 32px));
+      margin: 48px auto 28px;
+      padding: 52px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, var(--surface)), var(--surface) 58%),
+        var(--surface);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -90px;
+      top: -110px;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      border: 58px solid color-mix(in srgb, var(--primary) 8%, transparent);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary);
+      font-weight: 800;
+      font-size: .86rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4.2vw, 3.7rem);
+      line-height: 1.18;
+      margin: 12px 0 18px;
+      max-width: 900px;
+      letter-spacing: -.035em;
+    }
+
+    .hero-lead {
+      max-width: 810px;
+      color: var(--muted);
+      font-size: 1.12rem;
+      margin: 0;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .layout {
+      width: min(var(--max), calc(100% - 32px));
+      margin: 0 auto 72px;
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 82px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toc-title {
+      margin: 0 0 10px;
+      font-weight: 800;
+      font-size: .9rem;
+      color: var(--muted);
+    }
+
+    .toc a {
+      display: block;
+      padding: 7px 10px;
+      margin: 2px 0;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .toc a:hover, .toc a.active {
+      color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 9%, transparent);
+      font-weight: 700;
+    }
+
+    main { min-width: 0; }
+
+    section {
+      scroll-margin-top: 84px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 32px;
+      margin-bottom: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: clamp(1.45rem, 2.3vw, 2rem);
+      line-height: 1.3;
+      letter-spacing: -.02em;
+    }
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 1.15rem;
+    }
+
+    p { margin: 10px 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: .88rem; }
+
+    .callout {
+      border-left: 5px solid var(--primary);
+      background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+      padding: 18px 20px;
+      border-radius: 0 12px 12px 0;
+      margin: 18px 0;
+    }
+
+    .callout strong { color: var(--primary-2); }
+    .callout.warning {
+      border-left-color: var(--warning);
+      background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+    }
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+    }
+    .callout.success {
+      border-left-color: var(--success);
+      background: color-mix(in srgb, var(--success) 7%, var(--surface));
+    }
+
+    .grid-2, .grid-3, .grid-4 {
+      display: grid;
+      gap: 14px;
+    }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      background: var(--surface);
+    }
+    .card h3 { margin-top: 0; }
+    .card-number {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
+      color: var(--primary);
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+
+    ul, ol { padding-left: 1.35rem; }
+    li + li { margin-top: 5px; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 10px;
+      overflow-x: auto;
+      padding: 6px 2px 12px;
+    }
+
+    .flow-step {
+      min-width: 120px;
+      padding: 14px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+      text-align: center;
+      font-size: .9rem;
+      font-weight: 750;
+      position: relative;
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      transform: translate(50%, -50%);
+      color: var(--primary);
+      background: var(--surface);
+      width: 20px;
+      height: 20px;
+      line-height: 18px;
+      border-radius: 50%;
+      z-index: 2;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: .93rem;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--surface-2);
+      font-weight: 800;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    .table-wrap { overflow-x: auto; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: .78rem;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .r0 { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+    .r1 { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+    .r2 { color: var(--warning); background: color-mix(in srgb, var(--warning) 13%, transparent); }
+    .r3 { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+    .timeline {
+      position: relative;
+      margin: 20px 0 4px;
+      padding-left: 28px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--line);
+    }
+    .timeline-item {
+      position: relative;
+      margin: 0 0 20px;
+    }
+    .timeline-item::before {
+      content: "";
+      position: absolute;
+      left: -25px;
+      top: 8px;
+      width: 12px;
+      height: 12px;
+      background: var(--primary);
+      border: 3px solid var(--surface);
+      box-shadow: 0 0 0 1px var(--line);
+      border-radius: 50%;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    code {
+      background: var(--surface-2);
+      border-radius: 5px;
+      padding: .12em .36em;
+      font-size: .9em;
+    }
+    .codebox {
+      position: relative;
+      margin: 14px 0;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 0;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #111827;
+      color: #e5ecff;
+      line-height: 1.6;
+      font-size: .88rem;
+    }
+    .copy-btn {
+      position: absolute;
+      right: 9px;
+      top: 9px;
+      border: 1px solid rgba(255,255,255,.28);
+      color: #eef3ff;
+      background: rgba(255,255,255,.10);
+      border-radius: 8px;
+      padding: 5px 9px;
+      cursor: pointer;
+      font-size: .78rem;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0 16px;
+      margin: 10px 0;
+      background: var(--surface);
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 800;
+      padding: 14px 0;
+    }
+    details[open] { padding-bottom: 14px; }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: stretch;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .decision-path {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .decision-mid {
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      font-weight: 900;
+    }
+
+    .checklist {
+      list-style: none;
+      padding: 0;
+    }
+    .checklist li {
+      position: relative;
+      padding: 8px 8px 8px 34px;
+      margin: 2px 0;
+      border-radius: 8px;
+    }
+    .checklist li::before {
+      content: "□";
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      color: var(--primary);
+      font-size: 1.15rem;
+      font-weight: 900;
+    }
+    .checklist li:hover {
+      background: color-mix(in srgb, var(--primary) 6%, transparent);
+    }
+
+    .source-list li { margin-bottom: 8px; }
+    .footer {
+      width: min(var(--max), calc(100% - 32px));
+      margin: 0 auto 50px;
+      color: var(--muted);
+      text-align: center;
+      font-size: .86rem;
+    }
+
+    .no-print { display: initial; }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .toc nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { padding: 38px 30px; }
+    }
+
+    @media (max-width: 680px) {
+      .topbar-inner, .hero, .layout, .footer { width: min(100% - 20px, var(--max)); }
+      .hero { margin-top: 22px; padding: 30px 22px; border-radius: 20px; }
+      section { padding: 22px 18px; }
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .toc nav { grid-template-columns: 1fr; }
+      .decision { grid-template-columns: 1fr; }
+      .decision-mid { transform: rotate(90deg); min-height: 20px; }
+      .toolbar .label { display: none; }
+    }
+
+    @media print {
+      :root {
+        --bg: #fff;
+        --surface: #fff;
+        --surface-2: #f3f4f6;
+        --text: #111827;
+        --muted: #4b5563;
+        --line: #d1d5db;
+      }
+      body { background: #fff; font-size: 10.5pt; }
+      .topbar, .toc, .no-print { display: none !important; }
+      .hero, .layout, .footer { width: 100%; margin-left: 0; margin-right: 0; }
+      .hero { margin-top: 0; padding: 24px; box-shadow: none; }
+      .layout { display: block; }
+      section { box-shadow: none; page-break-inside: avoid; margin-bottom: 12px; }
+      details { page-break-inside: avoid; }
+      details > * { display: block !important; }
+      a { color: #111827; text-decoration: none; }
+      .flow { overflow: visible; grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">H</span>
+        <span>AI Harness Playbook</span>
+      </div>
+      <div class="toolbar no-print">
+        <button class="icon-btn" id="themeButton" type="button" aria-label="配色を切り替える">◐ <span class="label">配色</span></button>
+        <button class="icon-btn" type="button" onclick="window.print()">⎙ <span class="label">印刷・PDF</span></button>
+      </div>
+    </div>
+  </header>
+
+  <header class="hero">
+    <div class="eyebrow">Scrum Team / AI-Driven Development</div>
+    <h1>AIハーネスの<br>バージョンアップ・改善運用ガイド</h1>
+    <p class="hero-lead">
+      スクラムチームで共通利用するAI駆動開発ハーネスを、作成後も安全かつ継続的に改善するための実務ルール。
+      「いつ変えるか」「誰が確認するか」「何を評価するか」「問題時にどう戻すか」を明文化する。
+    </p>
+    <div class="hero-meta">
+      <span class="pill">対象：単一スクラムチーム</span>
+      <span class="pill">主目的：作成後の改善運用</span>
+      <span class="pill">推奨：スプリント単位の安定版</span>
+      <span class="pill">文書版：1.0 / 2026-08-06</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="toc">
+      <p class="toc-title">CONTENTS</p>
+      <nav id="tocNav">
+        <a href="#summary">1. 運用方針</a>
+        <a href="#scope">2. 管理対象</a>
+        <a href="#lifecycle">3. 改善ライフサイクル</a>
+        <a href="#sprint">4. スプリント運用</a>
+        <a href="#change-level">5. 変更レベル</a>
+        <a href="#versioning">6. バージョン管理</a>
+        <a href="#evaluation">7. 評価・品質ゲート</a>
+        <a href="#release">8. リリース・展開</a>
+        <a href="#rollback">9. ロールバック</a>
+        <a href="#roles">10. 役割</a>
+        <a href="#metrics">11. 指標と振り返り</a>
+        <a href="#templates">12. テンプレート</a>
+        <a href="#checklist">13. 導入チェック</a>
+        <a href="#sources">参考資料</a>
+      </nav>
+    </aside>
+
+    <main>
+      <section id="summary">
+        <h2>1. 運用方針：ハーネスは「開発プロセスのコード」である</h2>
+        <div class="callout success">
+          <strong>基本方針：</strong>
+          チーム標準ハーネスはスプリント開始時に固定し、改善候補はスプリント中に小さく試す。
+          評価とレビューを通過した変更だけを、原則として次スプリントの標準版へ昇格させる。
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <div class="card-number">1</div>
+            <h3>Gitで一元管理</h3>
+            <p>Skill、Agent、Rule、Hook、テンプレート、評価ケースをコードと同様に履歴管理する。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">2</div>
+            <h3>変更は必ずPR</h3>
+            <p>文章変更であってもAIの挙動が変わり得るため、差分・目的・評価結果をレビューする。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">3</div>
+            <h3>失敗を回帰ケース化</h3>
+            <p>実務で見つかった失敗は、修正だけで終わらせず再現可能な評価ケースとして残す。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">4</div>
+            <h3>段階的に昇格</h3>
+            <p>個人実験 → 候補版 → 一部タスク試行 → チーム標準版の順で広げる。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">5</div>
+            <h3>常に戻せる</h3>
+            <p>更新前の基準点をタグまたはコミットで残し、短時間でRevertできる状態にする。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">6</div>
+            <h3>一度に一変数</h3>
+            <p>ハーネス、モデル、CLIを同時更新せず、挙動変化の原因を切り分けられるようにする。</p>
+          </article>
+        </div>
+
+        <div class="callout warning">
+          <strong>避けること：</strong>
+          全員が常に最新の未評価版を使う、口頭合意だけで変更する、プロンプト変更を「単なる文言修正」として無評価で反映する。
+        </div>
+      </section>
+
+      <section id="scope">
+        <h2>2. 管理対象とリポジトリ構成</h2>
+        <p>
+          チーム共通の設定はリポジトリへコミットし、個人実験はローカル設定へ分離する。
+          Claude CodeではProjectスコープがチーム共有、Localスコープが個人・実験用途として提供されている。<sup><a href="#src-1">[1]</a></sup>
+        </p>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>チーム標準として管理</h3>
+            <ul>
+              <li><code>CLAUDE.md</code>／プロジェクトルール</li>
+              <li>Skills、Agents、Hooks</li>
+              <li>許可・禁止する操作</li>
+              <li>成果物とハンドオフの形式</li>
+              <li>Definition of Doneとの接続</li>
+              <li>回帰評価ケース</li>
+              <li>変更履歴・バージョン情報</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>チーム標準に含めない</h3>
+            <ul>
+              <li>APIキー、認証情報、個人情報</li>
+              <li>個人の表示・操作上の好み</li>
+              <li>未評価の実験設定</li>
+              <li>特定端末だけで動くパス</li>
+              <li>一時的なデバッグ指示</li>
+              <li>個人専用のMCP設定</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3>推奨構成</h3>
+        <div class="codebox">
+          <button class="copy-btn" type="button">コピー</button>
+          <pre>product-repository/
+├── .claude/
+│   ├── settings.json          # チーム共有設定
+│   ├── settings.local.json    # 個人実験（Git除外）
+│   ├── rules/
+│   ├── skills/
+│   ├── agents/
+│   └── hooks/
+├── harness-evals/
+│   ├── core/                  # 必須の代表ケース
+│   ├── regression/            # 過去の失敗事例
+│   └── safety/                # 危険操作・権限
+├── docs/harness/
+│   ├── OPERATIONS.md          # 本運用ルール
+│   ├── CHANGELOG.md
+│   └── ADR/                   # 大きな設計判断
+└── .harness-version           # 標準版識別子</pre>
+        </div>
+      </section>
+
+      <section id="lifecycle">
+        <h2>3. 改善ライフサイクル</h2>
+        <div class="flow" aria-label="ハーネス改善の流れ">
+          <div class="flow-step">問題を記録</div>
+          <div class="flow-step">再現ケース作成</div>
+          <div class="flow-step">ローカル実験</div>
+          <div class="flow-step">変更PR</div>
+          <div class="flow-step">自動・人手評価</div>
+          <div class="flow-step">限定試行</div>
+          <div class="flow-step">標準版へ昇格</div>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-item">
+            <h3>① 問題を事実として記録する</h3>
+            <p>「指示が悪い」ではなく、入力・期待結果・実際の結果・人間の修正内容を残す。</p>
+          </div>
+          <div class="timeline-item">
+            <h3>② 修正前に再現ケースを作る</h3>
+            <p>問題が再現することを確認し、修正後に同じケースが通ることを品質ゲートにする。</p>
+          </div>
+          <div class="timeline-item">
+            <h3>③ 個人またはブランチで小さく試す</h3>
+            <p>標準版を直接書き換えず、Local設定や専用ブランチで候補を検証する。</p>
+          </div>
+          <div class="timeline-item">
+            <h3>④ PRで目的と効果を説明する</h3>
+            <p>変更内容より先に、解消したい失敗・影響範囲・評価結果・戻し方を書く。</p>
+          </div>
+          <div class="timeline-item">
+            <h3>⑤ 代表ケースと実タスクで評価する</h3>
+            <p>固定データの評価だけでなく、実際の開発タスク1～3件で副作用を確認する。</p>
+          </div>
+          <div class="timeline-item">
+            <h3>⑥ レトロスペクティブで標準化を判断する</h3>
+            <p>品質・効率・使いやすさを確認し、次スプリントの標準版へ取り込むか決める。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="sprint">
+        <h2>4. スプリントに組み込む運用</h2>
+        <p>
+          Scrum Guideは、Sprint Retrospectiveで人・相互作用・プロセス・ツール・Definition of Doneを検査し、
+          品質と有効性を高める方法を計画するとしている。ハーネス改善はこの検査対象に自然に含められる。<sup><a href="#src-2">[2]</a></sup>
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>タイミング</th>
+                <th>実施内容</th>
+                <th>成果物</th>
+                <th>運用上の制約</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Sprint Planning前後</strong></td>
+                <td>今スプリントで使用する基準コミット／タグを確定</td>
+                <td>標準版の識別子</td>
+                <td>原則、スプリント中は固定</td>
+              </tr>
+              <tr>
+                <td><strong>Sprint中</strong></td>
+                <td>問題事例を記録し、候補版を限定的に実験</td>
+                <td>Issue、評価ケース、候補PR</td>
+                <td>チーム全員へ即時配布しない</td>
+              </tr>
+              <tr>
+                <td><strong>Daily Scrum</strong></td>
+                <td>Sprint Goalを妨げるハーネス問題だけ共有</td>
+                <td>対応タスク／一時回避策</td>
+                <td>詳細議論は別途実施</td>
+              </tr>
+              <tr>
+                <td><strong>Sprint Review</strong></td>
+                <td>必要な場合、ハーネス機能でなく成果への効果を説明</td>
+                <td>品質・手戻りの変化</td>
+                <td>内部実装の説明会にしない</td>
+              </tr>
+              <tr>
+                <td><strong>Retrospective</strong></td>
+                <td>10～15分で失敗・過剰制約・次の改善を検査</td>
+                <td>次スプリントの改善1件</td>
+                <td>改善候補を大量投入しない</td>
+              </tr>
+              <tr>
+                <td><strong>次Sprint開始前</strong></td>
+                <td>合格した変更を標準版へ昇格し、基準点を更新</td>
+                <td>タグ／コミット、Changelog</td>
+                <td>ロールバック先を必ず保持</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>スプリント途中の更新を許可する条件</h3>
+        <div class="decision">
+          <div class="decision-path">
+            <span class="badge r3">即時修正可</span>
+            <ul>
+              <li>危険な操作を許可してしまう</li>
+              <li>情報漏えい・権限問題がある</li>
+              <li>開発作業を広範囲に停止させる</li>
+              <li>重大な誤実装を反復させる</li>
+            </ul>
+            <p class="small muted">最小差分で修正し、全員へ明示通知。修正前タグを保持する。</p>
+          </div>
+          <div class="decision-mid">VS</div>
+          <div class="decision-path">
+            <span class="badge r1">次Sprintへ</span>
+            <ul>
+              <li>文章を分かりやすくする</li>
+              <li>出力形式を改善する</li>
+              <li>新しいSkillを追加する</li>
+              <li>効率やコストを改善する</li>
+            </ul>
+            <p class="small muted">候補版として評価し、Retrospective後に標準化する。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="change-level">
+        <h2>5. 変更レベルと承認ルール</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>レベル</th>
+                <th>代表例</th>
+                <th>必要な評価</th>
+                <th>承認</th>
+                <th>反映時期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge r0">R0 軽微</span></td>
+                <td>誤字、説明、例の追加。実行時挙動を変えない</td>
+                <td>構文・リンク確認</td>
+                <td>1名</td>
+                <td>随時可</td>
+              </tr>
+              <tr>
+                <td><span class="badge r1">R1 通常</span></td>
+                <td>Skill・Agent・プロンプト改善、任意チェック追加</td>
+                <td>対象ケース＋回帰ケース</td>
+                <td>別Developer 1名</td>
+                <td>原則次Sprint</td>
+              </tr>
+              <tr>
+                <td><span class="badge r2">R2 重要</span></td>
+                <td>完了判定、成果物形式、必須工程、標準ワークフロー変更</td>
+                <td>全Core評価＋実タスク試行</td>
+                <td>2名またはチーム合意</td>
+                <td>次Sprint境界</td>
+              </tr>
+              <tr>
+                <td><span class="badge r3">R3 高リスク</span></td>
+                <td>Hooks、権限、MCP、Bash自動実行、外部通信、秘密情報周辺</td>
+                <td>安全評価＋全回帰＋ロールバック演習</td>
+                <td>2名以上＋関係責任者</td>
+                <td>計画リリース／緊急修正</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>判定のコツ：</strong>
+          ファイルの差分量ではなく、AIの判断・権限・完了条件・成果物の互換性がどれだけ変わるかでレベルを決める。
+        </div>
+
+        <h3>自動更新を禁止する変更</h3>
+        <ul>
+          <li>新しいツール権限、外部MCP、外部送信先の追加</li>
+          <li>テスト・レビュー・承認工程の削除や緩和</li>
+          <li>Hookによる自動編集・自動コミット・自動実行の追加</li>
+          <li>既存の成果物形式、Skill名、必須入力を壊す変更</li>
+          <li>モデルやClaude Code CLIのメジャー更新を伴う変更</li>
+        </ul>
+      </section>
+
+      <section id="versioning">
+        <h2>6. バージョン管理ルール</h2>
+        <h3>単一リポジトリの推奨</h3>
+        <p>
+          まずは<strong>Gitコミット／タグを正式なバージョン</strong>として扱う。
+          スプリント基準点が分かるよう、次のいずれかを採用する。
+        </p>
+        <div class="grid-2">
+          <article class="card">
+            <h3>軽量方式</h3>
+            <div class="codebox">
+              <button class="copy-btn" type="button">コピー</button>
+              <pre>Sprint 24 baseline:
+harness-2026.08-s24
+commit: a31f2c8</pre>
+            </div>
+            <p class="small muted">アプリケーションとハーネスを同じリポジトリで管理するチーム向け。</p>
+          </article>
+          <article class="card">
+            <h3>明示バージョン方式</h3>
+            <div class="codebox">
+              <button class="copy-btn" type="button">コピー</button>
+              <pre># .harness-version
+version=1.7.0
+baseline_commit=a31f2c8
+claude_code=2.x
+model_profile=team-standard</pre>
+            </div>
+            <p class="small muted">監査、複数環境、複数リポジトリへの展開を見据える場合。</p>
+          </article>
+        </div>
+
+        <h3>Semantic Versioningを使う場合</h3>
+        <p>
+          Claude CodeのPlugin公式リファレンスも、明示バージョン運用では
+          <code>MAJOR.MINOR.PATCH</code>とChangelogを推奨している。<sup><a href="#src-3">[3]</a></sup>
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>種別</th><th>判断基準</th><th>例</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>PATCH</strong></td>
+                <td>互換性を保った不具合修正</td>
+                <td>誤コマンド修正、既存意図どおりの判定補正</td>
+              </tr>
+              <tr>
+                <td><strong>MINOR</strong></td>
+                <td>後方互換の機能追加・挙動改善</td>
+                <td>新Skill、任意チェック、評価済みプロンプト改善</td>
+              </tr>
+              <tr>
+                <td><strong>MAJOR</strong></td>
+                <td>利用者の対応が必要な非互換変更</td>
+                <td>Skill名変更、必須工程変更、出力スキーマ変更</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warning">
+          <strong>重要：</strong>
+          プロンプトの一文変更でも、AIの判断や編集範囲が変わる場合はR1以上とし、単純なPATCH扱いで無評価反映しない。
+        </div>
+
+        <h3>変更原因を切り分けるための固定項目</h3>
+        <ul>
+          <li>ハーネスのコミット／バージョン</li>
+          <li>Claude Code CLIのバージョン</li>
+          <li>利用モデルまたはモデルプロファイル</li>
+          <li>MCP・外部ツールのバージョン</li>
+          <li>評価データセットのバージョン</li>
+        </ul>
+      </section>
+
+      <section id="evaluation">
+        <h2>7. 評価・品質ゲート</h2>
+        <p>
+          AIハーネスでは「構文が正しい」だけでは不十分。意図した判断をするか、既存能力を壊していないか、
+          危険な副作用がないかを確認する。
+        </p>
+
+        <div class="grid-3">
+          <article class="card">
+            <h3>静的評価</h3>
+            <ul>
+              <li>設定・JSON・Markdown構文</li>
+              <li>参照ファイルの存在</li>
+              <li>禁止文字列・秘密情報</li>
+              <li>Hookスクリプトのテスト</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>振る舞い評価</h3>
+            <ul>
+              <li>正常系の代表タスク</li>
+              <li>曖昧な要件への対応</li>
+              <li>テスト失敗時の完了拒否</li>
+              <li>変更範囲の遵守</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>安全評価</h3>
+            <ul>
+              <li>危険コマンドの抑止</li>
+              <li>秘密情報の非出力</li>
+              <li>外部送信・権限要求</li>
+              <li>テスト無効化の防止</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3>PRをマージできる最低条件</h3>
+        <ul class="checklist">
+          <li>変更理由に対応する再現ケースがある</li>
+          <li>修正後に再現ケースが合格する</li>
+          <li>Core評価と過去の回帰評価が悪化していない</li>
+          <li>権限・外部通信・Hookへの影響を明記している</li>
+          <li>代表的な実タスクで過剰制約や不要変更がない</li>
+          <li>変更前の標準版へ戻す手順を確認している</li>
+          <li>モデル／CLIを同時変更した場合、その理由と比較を分離している</li>
+        </ul>
+
+        <h3>評価ケース例</h3>
+        <div class="codebox">
+          <button class="copy-btn" type="button">コピー</button>
+          <pre>id: REG-014
+title: IntegrationTest失敗を無視して完了扱いにしない
+given:
+  - IntegrationTestが1件失敗している
+when:
+  - 実装完了判定を実行する
+expected:
+  - 完了と報告しない
+  - 失敗テストを明示する
+  - テストを削除・無効化しない
+  - 未完了事項と次の行動を提示する
+risk: quality
+introduced_by: Sprint-23 incident</pre>
+        </div>
+
+        <div class="callout">
+          <strong>評価件数の目安：</strong>
+          最初はCore 10～20件でよい。件数を増やすより、実際に起きた重大な失敗を確実に回帰ケースへ追加する。
+        </div>
+      </section>
+
+      <section id="release">
+        <h2>8. リリース・展開ルール</h2>
+        <h3>推奨する昇格モデル</h3>
+        <div class="flow" aria-label="リリース昇格">
+          <div class="flow-step">Local<br>個人実験</div>
+          <div class="flow-step">Candidate<br>候補PR</div>
+          <div class="flow-step">Pilot<br>1～3タスク</div>
+          <div class="flow-step">Accepted<br>チーム合意</div>
+          <div class="flow-step">Stable<br>次Sprint標準</div>
+          <div class="flow-step">Observe<br>効果観測</div>
+          <div class="flow-step">Retain / Revert<br>維持・戻す</div>
+        </div>
+
+        <p>
+          変更を小さな対象へ先に展開し、既存版と比較してから広げる考え方は、
+          Google SREのカナリアリリース原則とも整合する。<sup><a href="#src-4">[4]</a></sup>
+        </p>
+
+        <h3>標準版リリース時の作業</h3>
+        <ol>
+          <li>PRをマージし、基準タグまたはバージョンを付与する</li>
+          <li><code>CHANGELOG.md</code>へ「変更・理由・影響・移行要否」を記載する</li>
+          <li>チームへ変更点を短く通知する</li>
+          <li>サンプルタスクまたは起動確認を実施する</li>
+          <li>前バージョンのタグ／コミットをロールバック先として記録する</li>
+          <li>次のRetrospectiveで効果を確認する観測項目を決める</li>
+        </ol>
+
+        <h3>互換性と廃止</h3>
+        <div class="timeline">
+          <div class="timeline-item"><strong>v1.7</strong>：旧Skillを非推奨として通知。新旧を併存。</div>
+          <div class="timeline-item"><strong>v1.8</strong>：移行例・自動変換・警告を提供。</div>
+          <div class="timeline-item"><strong>v2.0</strong>：旧Skillを削除。Sprint Planning前に移行を確認。</div>
+        </div>
+
+        <div class="callout warning">
+          <strong>自動アップデート：</strong>
+          チーム内Pluginを使う場合でも、Stable利用者に未評価コミットが自動反映される構成は避ける。
+          Claude Code Pluginでは明示バージョンかGit SHAによる更新判定が利用できる。<sup><a href="#src-3">[3]</a></sup>
+        </div>
+      </section>
+
+      <section id="rollback">
+        <h2>9. ロールバックと緊急対応</h2>
+        <div class="callout danger">
+          <strong>停止基準：</strong>
+          危険操作、秘密情報露出、重大な品質低下、複数メンバーの開発停止、原因不明の広範な挙動変化が発生した場合は、
+          改善継続より先に標準版を戻す。
+        </div>
+
+        <h3>標準ロールバック手順</h3>
+        <ol>
+          <li>問題のあるハーネス機能を停止または前版へRevertする</li>
+          <li>チームへ「影響・暫定対応・利用禁止範囲」を通知する</li>
+          <li>発生タスク、入力、出力、モデル、CLI、ハーネス版を保存する</li>
+          <li>前のStableタグでSmoke Testを行う</li>
+          <li>問題を再現ケースとして登録する</li>
+          <li>原因修正は別PRとし、緊急Revertと混ぜない</li>
+        </ol>
+
+        <h3>ロールバック判断表</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>事象</th><th>初動</th><th>復旧目標</th></tr></thead>
+            <tbody>
+              <tr><td>安全・秘密情報・権限問題</td><td>即時停止／前版へ戻す</td><td>安全確認まで再有効化しない</td></tr>
+              <tr><td>重大な誤実装を繰り返す</td><td>対象Skill停止または前版</td><td>再現ケース合格後に候補版へ</td></tr>
+              <tr><td>一部タスクで品質低下</td><td>対象用途を限定、次Sprintで修正</td><td>影響範囲を特定して再評価</td></tr>
+              <tr><td>使い勝手・コスト悪化</td><td>運用継続可、改善Issue化</td><td>Retrospectiveで優先順位判断</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="roles">
+        <h2>10. チーム内の役割と責任</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>Scrum Team</h3>
+            <p>ハーネスが支える品質基準、標準化する改善、廃止するルールを共同で判断する。</p>
+          </article>
+          <article class="card">
+            <h3>Developers</h3>
+            <p>問題記録、評価ケース作成、実装、レビュー、実タスク試行を担う。特定の担当者だけに閉じない。</p>
+          </article>
+          <article class="card">
+            <h3>Product Owner</h3>
+            <p>ハーネス改善が大きな開発容量を使う場合、顧客価値や技術的負債との優先順位を透明化する。</p>
+          </article>
+          <article class="card">
+            <h3>Scrum Master</h3>
+            <p>改善サイクル、自己管理、振り返りを支援する。ハーネスの承認者・管理者にはしない。</p>
+          </article>
+          <article class="card">
+            <h3>Harness Steward（当番）</h3>
+            <p>1スプリント単位で交代し、Issue整理、評価状況、Changelog、Retrospective材料を準備する。</p>
+          </article>
+          <article class="card">
+            <h3>変更PRのレビュアー</h3>
+            <p>作成者以外のDeveloperが担当する。R2・R3では、実際の利用者を最低1人含める。</p>
+          </article>
+        </div>
+
+        <p class="muted small">
+          GitHubのCODEOWNERSは対象ファイルのレビュー依頼や必須承認に利用できるが、
+          固定メンバーだけが理解・変更できる状態にならないよう、担当はローテーションする。<sup><a href="#src-5">[5]</a></sup>
+        </p>
+      </section>
+
+      <section id="metrics">
+        <h2>11. 効果測定とRetrospective</h2>
+        <p>指標は人の評価や生産性ランキングに使わず、ハーネスを改善するための診断情報として扱う。</p>
+
+        <div class="grid-3">
+          <article class="card">
+            <h3>品質</h3>
+            <ul>
+              <li>テスト未実行・見逃し件数</li>
+              <li>不要ファイル変更率</li>
+              <li>レビュー後の重大手戻り</li>
+              <li>本番・結合工程への流出</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>フロー</h3>
+            <ul>
+              <li>一度で完了できた割合</li>
+              <li>人間の修正回数</li>
+              <li>ハーネス起因の作業停止</li>
+              <li>更新PRのリードタイム</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>効率・体験</h3>
+            <ul>
+              <li>実行時間・トークン・コスト</li>
+              <li>過剰な確認や制約の件数</li>
+              <li>使わずに回避された頻度</li>
+              <li>チームの納得感</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3>Retrospectiveの10分進行例</h3>
+        <ol>
+          <li><strong>2分：</strong>今スプリントのハーネス変更と利用状況を確認</li>
+          <li><strong>3分：</strong>助かった場面／邪魔になった場面を各自1件</li>
+          <li><strong>2分：</strong>重大な失敗を回帰ケースへ追加できているか確認</li>
+          <li><strong>2分：</strong>次に直す改善を1件だけ選択</li>
+          <li><strong>1分：</strong>担当と観測する効果を決定</li>
+        </ol>
+
+        <div class="callout">
+          <strong>改善の優先順位：</strong>
+          ①安全性 → ②誤実装・品質 → ③作業停止 → ④手戻り → ⑤使いやすさ → ⑥速度・コスト。
+        </div>
+      </section>
+
+      <section id="templates">
+        <h2>12. そのまま使えるテンプレート</h2>
+
+        <details open>
+          <summary>ハーネス変更PRテンプレート</summary>
+          <div class="codebox">
+            <button class="copy-btn" type="button">コピー</button>
+            <pre>## 解決する問題
+- どのタスクで何が起きたか：
+- 期待する結果：
+- 実際の結果：
+- 人間が行った修正：
+
+## 変更内容
+- 対象：
+- 変更レベル：R0 / R1 / R2 / R3
+- 挙動・互換性への影響：
+
+## 評価
+- 追加した再現ケース：
+- Core評価：
+- Regression評価：
+- 実タスク試行：
+- 実行時間・コストへの影響：
+
+## 安全性
+- 権限変更：あり / なし
+- Hooks変更：あり / なし
+- MCP・外部通信変更：あり / なし
+- 秘密情報への影響：あり / なし
+
+## 展開
+- 適用予定：即時 / 次Sprint
+- 移行作業：あり / なし
+- ロールバック先：
+- ロールバック手順：</pre>
+          </div>
+        </details>
+
+        <details>
+          <summary>CHANGELOGテンプレート</summary>
+          <div class="codebox">
+            <button class="copy-btn" type="button">コピー</button>
+            <pre>## [1.7.0] - 2026-08-XX
+
+### Added
+- IntegrationTest完了確認ルールを追加
+
+### Changed
+- AIレビュー結果のMR記録形式を明確化
+
+### Fixed
+- テスト失敗時に完了報告するケースを修正
+
+### Deprecated
+- /old-review は次期MAJORで削除予定
+
+### Risk / Impact
+- 権限・MCP・外部通信の変更なし
+- 既存Skill名の変更なし
+
+### Evaluation
+- Core: 18/18
+- Regression: 12/12
+- Pilot: 3タスクで問題なし
+
+### Rollback
+- harness-v1.6.2 へ戻す</pre>
+          </div>
+        </details>
+
+        <details>
+          <summary>ハーネス不具合Issueテンプレート</summary>
+          <div class="codebox">
+            <button class="copy-btn" type="button">コピー</button>
+            <pre>## 発生状況
+- Sprint / PBI：
+- ハーネス版：
+- Claude Code版：
+- モデル：
+- 対象Skill / Agent / Hook：
+
+## 再現情報
+- 入力：
+- 前提状態：
+- 実行手順：
+- 実際の出力：
+- 期待する出力：
+
+## 影響
+- 安全性：
+- 品質：
+- 作業停止：
+- 回避策：
+
+## 対応
+- 緊急停止が必要：はい / いいえ
+- 回帰ケース候補：
+- 証跡の保存場所：</pre>
+          </div>
+        </details>
+
+        <details>
+          <summary>チームWorking Agreement</summary>
+          <div class="codebox">
+            <button class="copy-btn" type="button">コピー</button>
+            <pre># AIハーネス運用Working Agreement
+
+1. チーム標準ハーネスはGitで管理する
+2. 挙動に影響する変更は必ずPRにする
+3. プロンプト変更もコード変更として評価する
+4. 個人実験はLocal設定または専用ブランチで行う
+5. 標準版は原則としてSprint境界で更新する
+6. Sprint途中の更新は安全・重大品質・作業停止への対応に限定する
+7. 変更には再現ケースまたは評価ケースを付ける
+8. 実務で発生した重大な失敗を回帰評価へ追加する
+9. Hooks・権限・MCP変更は2名以上で確認する
+10. 更新前のバージョンへ戻せる状態を維持する
+11. ハーネス担当はSprintごとに交代する
+12. ハーネスがSprint Goalを妨げる場合は利用を停止できる</pre>
+          </div>
+        </details>
+
+        <details>
+          <summary>Definition of Doneへの追加例</summary>
+          <div class="codebox">
+            <button class="copy-btn" type="button">コピー</button>
+            <pre>## AI駆動開発に関するDefinition of Done
+
+- AIが変更したコードを人間が確認している
+- 必要なUnit TestとIntegration Testが実行・成功している
+- AIレビュー結果と対応内容がMRに記録されている
+- 意図しないファイル変更が含まれていない
+- 未解決事項と既知の制約が明記されている
+- テストや品質ゲートを無効化していない
+- 新しい重大なハーネス失敗が見つかった場合、再現ケースを登録している</pre>
+          </div>
+        </details>
+      </section>
+
+      <section id="checklist">
+        <h2>13. 導入・運用チェックリスト</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>最初の整備</h3>
+            <ul class="checklist">
+              <li>チーム共有と個人実験の保存場所を分けた</li>
+              <li>標準版を識別するタグ／ファイルを決めた</li>
+              <li>変更レベルR0～R3を合意した</li>
+              <li>PRテンプレートを追加した</li>
+              <li>Core評価を10件程度作成した</li>
+              <li>前版へ戻す手順を試した</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>毎Sprint</h3>
+            <ul class="checklist">
+              <li>開始時の基準バージョンを記録した</li>
+              <li>問題事例を証跡付きでIssue化した</li>
+              <li>変更PRに評価結果がある</li>
+              <li>重大な失敗を回帰ケースへ追加した</li>
+              <li>Retrospectiveで10分検査した</li>
+              <li>次Sprintの改善を1件に絞った</li>
+              <li>Stableとロールバック先を記録した</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3>最小運用ルール</h3>
+        <div class="callout success">
+          迷った場合は、まず次の5つだけ守る。<br>
+          <strong>① Git管理　② 変更PR　③ 再現ケース　④ Sprint境界で更新　⑤ 即時Revert可能</strong>
+        </div>
+      </section>
+
+      <section id="sources">
+        <h2>参考資料</h2>
+        <ol class="source-list">
+          <li id="src-1">
+            Anthropic, <a href="https://code.claude.com/docs/en/configuration" target="_blank" rel="noopener">Claude Code settings — Configuration scopes</a>：
+            Project設定はGitでチーム共有、Local設定は個人・実験用途。
+          </li>
+          <li id="src-2">
+            Ken Schwaber &amp; Jeff Sutherland,
+            <a href="https://scrumguides.org/scrum-guide.html" target="_blank" rel="noopener">The Scrum Guide（November 2020）</a>：
+            Sprint Retrospectiveではプロセス、ツール、Definition of Doneなどを検査し、品質と有効性の改善を計画する。
+          </li>
+          <li id="src-3">
+            Anthropic, <a href="https://code.claude.com/docs/en/plugins-reference" target="_blank" rel="noopener">Claude Code Plugins reference</a>：
+            PluginのProjectスコープ、明示バージョンとGit SHA、Semantic Versioning、Changelog。
+          </li>
+          <li id="src-4">
+            Google, <a href="https://sre.google/workbook/canarying-releases/" target="_blank" rel="noopener">SRE Workbook — Canarying Releases</a>：
+            小さな対象へ変更を先行展開し、観測してから拡大する考え方。
+          </li>
+          <li id="src-5">
+            GitHub, <a href="https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners" target="_blank" rel="noopener">About code owners</a>：
+            対象ファイルのレビュー依頼とCode Owner承認。
+          </li>
+          <li id="src-6">
+            GitHub, <a href="https://docs.github.com/en/actions/concepts/workflows-and-actions/reusing-workflow-configurations" target="_blank" rel="noopener">Reusing workflow configurations</a>：
+            コミットSHA参照により、再利用側が同じワークフローを使用できる。
+          </li>
+          <li id="src-7">
+            Anthropic, <a href="https://code.claude.com/docs/en/plugin-marketplaces" target="_blank" rel="noopener">Create and distribute a plugin marketplace</a>：
+            チーム配布、バージョン追跡、更新検出。複数リポジトリへ展開する段階で利用を検討。
+          </li>
+        </ol>
+        <p class="muted small">
+          本資料の運用案は、上記の公式仕様・原則を単一スクラムチーム向けに簡素化し、AIハーネス特有の挙動評価と回帰管理を加えた提案です。
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <footer class="footer">
+    Scrum Team AI Harness Operations Guide — Standalone HTML / No external library required
+  </footer>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const themeButton = document.getElementById('themeButton');
+      const saved = localStorage.getItem('harness-guide-theme');
+      if (saved) root.dataset.theme = saved;
+
+      themeButton.addEventListener('click', () => {
+        const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        localStorage.setItem('harness-guide-theme', next);
+      });
+
+      document.querySelectorAll('.copy-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const pre = button.parentElement.querySelector('pre');
+          try {
+            await navigator.clipboard.writeText(pre.innerText);
+            const old = button.textContent;
+            button.textContent = 'コピー済み';
+            setTimeout(() => button.textContent = old, 1200);
+          } catch {
+            button.textContent = '選択してコピー';
+          }
+        });
+      });
+
+      const links = [...document.querySelectorAll('#tocNav a')];
+      const sections = links
+        .map(a => document.querySelector(a.getAttribute('href')))
+        .filter(Boolean);
+
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+          .filter(entry => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        links.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + visible.target.id);
+        });
+      }, { rootMargin: '-18% 0px -68% 0px', threshold: [0, .1, .3, .6] });
+
+      sections.forEach(section => observer.observe(section));
+    })();
+  </script>
+</body>
+</html>
