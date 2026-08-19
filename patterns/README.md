@@ -22,6 +22,8 @@ Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket 
 
 ハーネスを構成する部品（コマンド、ロール、権限）の蓄積・配布・一貫性維持は、[Cookbook Harness](claude-code-cookbook-harness/README.md)を参照する。上表の4方式が1タスクの遂行手順を定めるのに対し、こちらは適用レイヤが異なるため併用できる。ただし人間承認の正本は[Human Gate Policy](human-gate-policy.md)のままとし、同パターンのロール定義で既存の2軸Reviewを置き換えない。
 
+工程管理のない場面（単発PR、他リポジトリ、コミット前の自己チェック）でのレビューは、[Review Skill](claude-code-review-skill/README.md)を使う。反証ゲートでprecisionを担保し、設計上コードを変更しない。Development HarnessのPHASE-9レビューエージェントとは適用レイヤが異なるため、こちらが既存の2軸Reviewを置き換えることはない。
+
 ## 参考資料
 
 - [Claude CodeのモデルとEffortの選び方](assets/claude-code-model-effort-selection-guide.png)

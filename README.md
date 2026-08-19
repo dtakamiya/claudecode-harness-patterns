@@ -12,6 +12,7 @@ Claude Codeを利用した開発ハーネスの再利用可能な設計パター
 - [Human Gate Policy](patterns/human-gate-policy.md) — 全ハーネス共通のリスク階層、承認対象、Decision Packet、失効、役割分離を定めるポリシー
 - [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約
 - [Claude Code Cookbook Harness](patterns/claude-code-cookbook-harness/README.md) — ハーネスを能力の配布物として構成し、二面公開、権限拘束ロール、構造検証で一貫性を保つパターン
+- [Claude Code Review Skill](patterns/claude-code-review-skill/README.md) — 工程非依存の汎用レビュースキルを、反証ゲートと権限拘束でprecision優先に設計するパターン
 
 ## Research
 
