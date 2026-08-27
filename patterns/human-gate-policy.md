@@ -2,12 +2,15 @@
 
 ## 1. 目的と原則
 
-本ポリシーは、各ハーネスに共通する人間承認の正本である。ヒューマンゲートは工程ごとの儀式ではなく、機械判定できない価値判断、高影響な操作、残存リスクの受容に限定する。テスト結果、終了コード、schema、revision、lease、digest、禁止操作はRunner、CI、permissionsまたは実行基盤で判定し、人間へ再計算させない。
+本ポリシーは、各ハーネスに共通する人間承認の正本である。ヒューマンゲートは工程ごとの儀式ではなく、機械判定できない価値判断、高影響な操作、残存リスクの受容に限定する。テスト結果、終了コード、schema、revision、lease、digest、危険コマンド検出、禁止操作はRunner、CI、permissions、権限分類器（classifier）または実行基盤で判定し、人間へ再計算させない。
+
+permission promptの数を増やすこと自体は安全性を高めない。承認数が増えれば各承認の実効性は下がり、儀式化したpermission promptはむしろ被害を増やす。機械判定可能な項目は分類器、permissions、Runnerへ委ね、ゲートは機械判定できない価値判断と高Tier操作へ集中させる（Anthropicの観察値では、危険コマンド検出率は分類器89%に対し人手13.6%、依頼外の本番影響級操作を含むセッション比率はauto mode 2.4%に対し全操作手動承認6.3%。いずれもopt-inセッションの観察であり対照実験ではない）。
 
 - 人間は`Intent`、`Scope`、`Evidence`、`Risk`、`Recovery`を確認する。
 - 機械ゲートが未完了、証跡が古い、承認対象が曖昧な場合は`fail-closed`とする。
 - ハーネス固有規則が本ポリシーより厳しい場合は、厳しい規則を優先する。
 - AI/LLM ReviewerのPASSは人間Approverを代替しない。
+- 権限分類器（classifier）のPASS（auto modeでの自動実行を含む）は、Tier 2以上の必須ヒューマンゲートを代替しない。分類器はTier 0/1の自動実行を支える機械ゲートであり、要件、リスク受容、外部反映、制御面の各ゲートを不要にしない。
 - 承認は権限付与ではなく、denyまたは禁止操作を解除しない。
 - Manual modeはPoC限定のままとし、人間承認で機械的guardrailの不足を補わない。
 
@@ -21,7 +24,7 @@
 | Tier 3 | 独立した二名承認と操作単位の実行制御を行う | 本番・共有データへ適用するmigration、認証・認可・秘密情報境界、破壊的API、広範囲またはrollback困難な変更 |
 | Tier 4 | 通常ハーネスでは禁止し、専用手順へ移す | セキュリティインシデント、無制限credential、承認対象を固定できない不可逆操作 |
 
-ファイル数ではなく、利用者影響、データ影響、可逆性、権限、波及範囲、不確実性でTierを決める。Tierは単一操作だけでなく、同一task、同一目的の変更系列、累積差分と副作用で評価し、同じ外部変更を構成するmutationや副作用を操作分割で降格させない。read-only観測と決定論的検証はTier 0のままとするが、高Tierのmutationや外部反映は該当ゲート通過まで実行しない。Tierを確定できない場合は一段上として扱い、人間へ選択肢を提示する。
+ファイル数ではなく、利用者影響、データ影響、可逆性、権限、波及範囲、不確実性でTierを決める。Tierは単一操作だけでなく、同一task、同一目的の変更系列、累積差分と副作用で評価し、同じ外部変更を構成するmutationや副作用を操作分割で降格させない。read-only観測と決定論的検証はTier 0のままとするが、高Tierのmutationや外部反映は該当ゲート通過まで実行しない。Tierを確定できない場合は一段上として扱い、人間へ選択肢を提示する。権限分類器（classifier）は、Tier 0/1の自動実行を支える機械ゲートとして働き、危険と判定したアクションだけを人間承認へfallbackさせる。分類器のfallbackはTierを引き上げず、分類器のPASSはTier 2以上のmutationや外部反映を該当ヒューマンゲートなしに実行してよいとは意味しない。
 
 ## 3. 必須ヒューマンゲート
 
@@ -30,9 +33,9 @@
 | 要件ゲート | 実装前 | 目的、受入条件、対象外、業務上のトレードオフ | 結果を変える曖昧性がなく、責任者が受入条件を承認 |
 | リスク受容ゲート | Tier 2以上の設計・操作前 | リスク階層、影響、代替案、残存リスク | 適格な承認者がDecision Packetの固定revisionを承認 |
 | 外部反映ゲート | merge、release、本番、確定writeback前 | 外部状態を変更してよいか | 最新証跡、対象、停止条件、Recoveryが承認と一致 |
-| 制御面ゲート | rules、Skills、Hooks、Runner、permissions、品質ゲート変更前 | ハーネス自身の信頼境界を変更してよいか | 所有者承認と独立Harness Reviewが完了 |
+| 制御面ゲート | rules、Skills、Hooks、Runner、permissions、権限分類器（classifier）設定、auto modeの有効・無効、品質ゲート変更前 | ハーネス自身の信頼境界を変更してよいか | 所有者承認と独立Harness Reviewが完了 |
 
-feature branch作成、ローカルcommit、スコープ内の編集ごとには人間承認を要求しない。Tier 1のpushやdraft PRはprivate repositoryに限り、機械検証可能なpre-authorization grantにgrant ID、発行者identity、grantee/workload identity、task/run ID、目的、明示的なPR作成Intent、発行時刻、期限、最大使用回数、取消状態、repository ID、source branch・commitまたはscope、branch名前空間、許可する操作種別、PRの可視性、許容するCI・通知・preview等の連携副作用を固定した場合だけ自動化できる。grantは信頼済み鍵による署名またはMAC、もしくはACL保護されたauthority store内のgrant IDと固定digestで認証し、裸のdigestだけを認証根拠にしない。実行直前に認証結果、利用主体、現在task、期限、使用回数、取消状態、実対象を照合し、各使用を監査記録する。不一致は`fail-closed`とする。現在taskのPR作成Intentを証明できない場合、または条件を一つでも満たさないPR作成はTier 2とし、protected branchへのmerge、release、本番変更へ許可を継承してはならない。
+feature branch作成、ローカルcommit、スコープ内の編集ごとには人間承認を要求しない。権限分類器（classifier）およびauto modeは、要件ゲート、リスク受容ゲート、外部反映ゲート、制御面ゲートのいずれも代替しない。分類器はスコープ内のTier 0/1操作の自動実行を支えるだけであり、必須ヒューマンゲートは分類器のPASS有無にかかわらず通過を要する。auto mode有効時はサブエージェントのfrontmatterの`permissionMode`が無視され、子agentの各アクションは親と同じ分類器判定を受ける。したがってサブエージェントに、より緩い`permissionMode`を与えて必須ゲートやTier 2以上の操作を迂回させることはできず、そのような迂回を前提に設計してはならない。Tier 1のpushやdraft PRはprivate repositoryに限り、機械検証可能なpre-authorization grantにgrant ID、発行者identity、grantee/workload identity、task/run ID、目的、明示的なPR作成Intent、発行時刻、期限、最大使用回数、取消状態、repository ID、source branch・commitまたはscope、branch名前空間、許可する操作種別、PRの可視性、許容するCI・通知・preview等の連携副作用を固定した場合だけ自動化できる。grantは信頼済み鍵による署名またはMAC、もしくはACL保護されたauthority store内のgrant IDと固定digestで認証し、裸のdigestだけを認証根拠にしない。実行直前に認証結果、利用主体、現在task、期限、使用回数、取消状態、実対象を照合し、各使用を監査記録する。不一致は`fail-closed`とする。現在taskのPR作成Intentを証明できない場合、または条件を一つでも満たさないPR作成はTier 2とし、protected branchへのmerge、release、本番変更へ許可を継承してはならない。
 
 ## 4. Decision Packet
 
@@ -71,7 +74,7 @@ feature branch作成、ローカルcommit、スコープ内の編集ごとには
 - 対象resource、operation、parameters、影響範囲
 - 受入条件、権限、依存、migration内容
 - 成功条件、停止条件、timeout、rollback条件
-- 承認期限、承認者資格、前提となる機械ゲート結果
+- 承認期限、承認者資格、前提となる機械ゲート結果（permissions、CI、権限分類器（classifier）の判定を含む）
 
 期限切れ、部分一致、競合する承認、承認者不在は`fail-closed`とする。承認済みimmutable intentの同一payloadを、同じidempotency keyとpreconditionで再送する場合だけ再承認を不要とする。payload、target、expected statusまたはpreconditionが変われば再承認する。Incidentは既存の`incident-action/v1`によるcanonical payloadとdigest束縛を使用し、別schemaを追加しない。
 
@@ -95,5 +98,6 @@ Human Gate自体もHarness Evalsの対象とし、少なくとも次を定期的
 - 誤承認、過剰承認、承認漏れ、同一原因の再発
 - Tier 1サンプリングで見つかった重大指摘率
 - Decision Packetの不足項目と、承認者が追加確認した証拠
+- 権限分類器（classifier）のfalse negative率、分類器PASS後に人間またはレビューが問題を検出した率、auto modeでのfallback率とoverride率
 
-Tier 1のサンプリング率は変更リスクと過去の指摘率から定める。重大な見逃し、制御面の変更、初めて扱う操作はサンプリングではなくTier 2以上へ昇格する。
+Tier 1のサンプリング率は変更リスクと過去の指摘率、権限分類器（classifier）のfalse negative実績から定める。重大な見逃し、制御面の変更、分類器設定・auto modeの変更、初めて扱う操作はサンプリングではなくTier 2以上へ昇格する。
