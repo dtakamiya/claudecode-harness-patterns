@@ -23,9 +23,22 @@ Pick the mode from the user's argument. With no argument, run `status`, then pro
 | `resume`, `続きから` | Resume | Restore session state, verify it, then report the next executable action. | no |
 | `next` | Next | Restore state, then execute the next single action — delegate one specialist agent, or judge one gate. | yes |
 | `gate` | Gate | Judge the current phase exit gate only, from recorded evidence. | yes |
-| `start` | Start | Bootstrap PHASE-0 via the `initializer` agent when no `progress.yaml` exists. | yes |
+| `start` | Start | Bootstrap PHASE-0 via the `initializer` agent. | yes |
 
 Never skip the state restore in `next`, `gate`, or `start`.
+
+### When `start` applies
+
+`start` is valid in either of these situations:
+
+- `docs/status/progress.yaml` does not exist, **or**
+- it exists and carries `bootstrap_seed: true` with `current_phase_status: queued` and `current_phase_id: PHASE-0` (design §5.-1).
+
+`install-harness.sh --profile bootstrap` writes a seed `progress.yaml` so the harness has a current position from the very first run. A seed is *not* progress — PHASE-0 has not been executed. Treat it as equivalent to "no state" when choosing the mode, and delegate PHASE-0 to `initializer`.
+
+Refusing `start` because the seed file exists strands a freshly installed harness: `start` is rejected for having state, while `status` and `resume` have no executed phase to report. Nothing begins.
+
+Once `initializer` completes PHASE-0, drop `bootstrap_seed` from `progress.yaml`. After that, `start` no longer applies and the mode is `next`.
 
 ## Run a mode
 

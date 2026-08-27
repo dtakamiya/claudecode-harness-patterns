@@ -28,6 +28,12 @@ Use a temp file plus atomic rename via Bash. A partially written state file is w
 
 `revision` is a monotonic counter, not a Git SHA. Check it independently of the `current_commit` match; the two can disagree in either direction and each disagreement means something different.
 
+## Consuming the bootstrap seed
+
+When the write records the completion of PHASE-0, drop the `bootstrap_seed` key in the same write.
+
+Leaving it set keeps `start` valid forever and suppresses the Git HEAD check that guards every later phase (`state-restore.md`). The harness would then advance on state that no longer agrees with the repository.
+
 ## Write scope
 
 Write access is limited to:

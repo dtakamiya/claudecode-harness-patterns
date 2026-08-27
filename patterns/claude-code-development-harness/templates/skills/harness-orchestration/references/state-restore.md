@@ -6,9 +6,22 @@ Repository artifacts are authoritative. Never infer the current phase, task, gat
 
 ## When to run
 
-Run this before acting in every mode except `start` on a repository that has no harness state.
+Run this before acting in every mode except `start` on a repository that has no harness state, or whose state is an unconsumed bootstrap seed (see below).
 
 If `docs/status/progress.yaml` does not exist, the only valid mode is `start`. Report that and stop.
+
+## Bootstrap seed
+
+`install-harness.sh --profile bootstrap` writes a seed `progress.yaml` marked `bootstrap_seed: true` with `current_phase_status: queued` and `current_phase_id: PHASE-0` (design §5.-1). It records a position, not progress — PHASE-0 has not run.
+
+While that marker is present, treat the state as an unconsumed seed:
+
+- `start` is the valid mode. Do not refuse it on the grounds that `progress.yaml` already exists.
+- Skip the Git HEAD comparison in step 4 and Verification. The seed's `current_commit` is written at install time and legitimately falls behind while the repository is prepared — branch creation, `CLAUDE.md`, allowlist edits — before PHASE-0 ever runs. A stale seed SHA is not evidence of divergent state.
+- Skip step 2 and the `current_phase_run_ref` blocking check. A seed carries `current_phase_run_ref: ""` because PHASE-0 has not produced a `PhaseRun` yet; an empty ref on a seed is expected, not a resolve failure.
+- Every other verification below still applies.
+
+The orchestrator drops the marker when it records PHASE-0 completion (`progress-update.md`). From then on the Git HEAD comparison is mandatory.
 
 ## Procedure
 
@@ -28,8 +41,8 @@ If `docs/status/progress.yaml` does not exist, the only valid mode is `start`. R
 
 Treat each of the following as blocking. Report it and stop — do not advance a phase on top of state that disagrees with Git.
 
-- Git HEAD does not match `progress.yaml.current_commit`.
-- `current_phase_run_ref` does not resolve, or resolves outside `docs/status/`.
+- Git HEAD does not match `progress.yaml.current_commit` (not applicable to an unconsumed bootstrap seed — see above).
+- `current_phase_run_ref` does not resolve, or resolves outside `docs/status/` (not applicable to an unconsumed bootstrap seed, whose ref is legitimately empty — see above).
 - A run ref contains `..`, is a symlink, or its filename does not match its internal ID.
 - `blocking_issues` is non-empty.
 - The capability profile resolves to Manual mode. Manual is not for real use (design §3.5.1); report it and stop.
