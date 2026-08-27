@@ -16,6 +16,12 @@ An action is either delegating one specialist agent, or judging one gate. Not bo
 
 Verify the phase entry gate passed before delegating into that phase (design §3.4.1 実行規則, `pending → ready → in_progress`). An `entry_gate` of `—` needs no check.
 
+## Delegate in the foreground
+
+`settings.json`'s `permissions.allow` deliberately excludes `Bash` and `Write` (see its `$comment`: "Bash・Writeは意図的にここへ含めない。人の承認を通し、PreToolUse Hookの…"): every Bash/Write call from any agent — including a delegated specialist — routes through the PreToolUse hook's `defer` decision, which falls through to the operator's own approval prompt. That approval prompt has no recipient when the delegate runs as a background subagent; there is no operator to answer it, so the run stalls or returns having completed nothing, often after several silent retries that look like progress but never touch Bash or Write.
+
+Delegate specialist agents expected to run Bash or Write (Initializer, Generator, Evaluator, Auditor, etc.) in the **foreground** — run the Task call synchronously and stay present to answer the resulting permission prompts. Only delegate in the background for read-only exploration or review subagents whose tool set doesn't need Bash/Write approval.
+
 ## Delegate
 
 Use the Task tool. Pass:
