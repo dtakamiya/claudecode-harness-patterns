@@ -24,6 +24,8 @@ Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket 
 
 工程管理のない場面（単発PR、他リポジトリ、コミット前の自己チェック）でのレビューは、[Review Skill](claude-code-review-skill/README.md)を使う。反証ゲートでprecisionを担保し、設計上コードを変更しない。Development HarnessのPHASE-9レビューエージェントとは適用レイヤが異なるため、こちらが既存の2軸Reviewを置き換えることはない。
 
+インシデント/障害の**チケット記述**そのものをレビューしたい場合（PIR会議前、チケットクローズ前のセルフチェック）は、[Jira Incident Review Skill](claude-code-jira-review-skill/README.md)を使う。貼り付けたチケット本文だけを対象に、必須フィールド・タイムライン・根本原因・アクションアイテムの質と、すり抜け工程や再発防止の実効性という品質プロセスの穴を、チェックリスト全項目に合否を付けて指摘する。Incident Response Harnessが対応中の進行を担うのに対し、こちらは事後のチケット品質に限る。
+
 ## 参考資料
 
 - [Claude CodeのモデルとEffortの選び方](assets/claude-code-model-effort-selection-guide.png)

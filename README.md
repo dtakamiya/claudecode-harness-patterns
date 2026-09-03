@@ -13,6 +13,7 @@ Claude Codeを利用した開発ハーネスの再利用可能な設計パター
 - [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約
 - [Claude Code Cookbook Harness](patterns/claude-code-cookbook-harness/README.md) — ハーネスを能力の配布物として構成し、二面公開、権限拘束ロール、構造検証で一貫性を保つパターン
 - [Claude Code Review Skill](patterns/claude-code-review-skill/README.md) — 工程非依存の汎用レビュースキルを、反証ゲートと権限拘束でprecision優先に設計するパターン
+- [Claude Code Jira Incident Review Skill](patterns/claude-code-jira-review-skill/README.md) — 貼り付けたJiraのインシデント/障害チケットを、記述の質と品質プロセスの穴（検知・テスト・再発防止）でレビューする網羅型スキルのパターン
 
 ## Research
 
