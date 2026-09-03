@@ -162,7 +162,7 @@ ROI の大半は知識移転とされる。
 | 出典 | 反映先 |
 |---|---|
 | Atlassian — Post-incident review best practices / Postmortems handbook | `incident-checklist.md`: severity / 影響開始・検知・復旧時刻（時刻の定義ブロック、4 つ揃わないとブロッカー）/ 影響 6 次元 / 公開リードタイム（目安として緩和）/ follow-up の work item 化 |
-| Atlassian / PagerDuty — Blameless postmortem | `blameless-language.md`: 検出パターン（人名 + 過失動詞、和英）と言い換えテンプレート、許容される表現。`incident-checklist.md` B6: foresight not hindsight |
+| Atlassian / PagerDuty — Blameless postmortem | `blameless-language.md`: 検出パターン（人名 + 過失動詞、和英）と言い換えテンプレート、許容される表現、ブロッカー条件（非難的表現が根本原因欄・アクションアイテム欄にある → ブロッカー。§4.4 索引の正典）。`incident-checklist.md` B6: foresight not hindsight |
 | John Allspaw — "Blameless PostMortems and a Just Culture" / "The Infinite Hows" | `blameless-language.md`: second story チェック。`incident-checklist.md` C1: 「5 Whys の深さ」→「因果の深さ（本数でなく到達点）」、単線 why の否定 |
 | Fred Hebert — "Superficial Blamelessness" | `blameless-language.md`: 言い換えだけで second story を欠くものは proximate 停止として要改善 |
 | Google SRE Book — "Postmortem Culture: Learning from Failure" | `SKILL.md`: 免責文、想定利用者節、「良い点」を先に列挙。`incident-checklist.md` C8/E2: 対応判断を後知恵で断罪しない。`action-items.md`: アクションアイテムの適切さと優先順位。D1: SLO 影響 |
