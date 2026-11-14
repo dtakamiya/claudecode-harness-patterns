@@ -48,10 +48,20 @@ def work_dir(out, task, label):
     return Path(task.get("cwd") or Path.cwd())
 
 
+def needs_run(result_path, force):
+    """未実行・前回失敗・壊れた結果なら実行する。成功済みは --force のときだけ再実行。"""
+    if force or not result_path.exists():
+        return True
+    try:
+        return bool(json.loads(result_path.read_text(encoding="utf-8")).get("is_error"))
+    except (json.JSONDecodeError, OSError):
+        return True
+
+
 def run_one(out, task, label, model_id, force):
     rdir = run_dir(out, task["id"], label)
     result_path = rdir / "result.json"
-    if result_path.exists() and not force:
+    if not needs_run(result_path, force):
         return f"skip {task['id']}__{label}"
     rdir.mkdir(parents=True, exist_ok=True)
     cwd = work_dir(out, task, label)
@@ -67,7 +77,7 @@ def run_one(out, task, label, model_id, force):
         proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=RUN_TIMEOUT_SEC)
         (rdir / "stderr.txt").write_text(proc.stderr, encoding="utf-8")
         parsed = json.loads(proc.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as exc:
         parsed = {"is_error": True, "result": f"実行失敗: {exc!r}", "usage": {}}
     result_path.write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
     return f"done {task['id']}__{label} error={parsed.get('is_error')}"
@@ -79,8 +89,12 @@ def load_meta(out):
 
 
 def merge_models(existing, new_pairs):
-    labels = {m["label"] for m in existing}
-    added = [{"label": l, "model_id": i} for l, i in new_pairs if l not in labels]
+    known = {m["label"]: m["model_id"] for m in existing}
+    conflicts = [f"{l}（既存 {known[l]} / 指定 {i}）" for l, i in new_pairs if known.get(l, i) != i]
+    if conflicts:
+        sys.exit("既存ラベルに別のモデル ID は指定できません。別ラベルにするか --out を変えてください: "
+                 + ", ".join(conflicts))
+    added = [{"label": l, "model_id": i} for l, i in new_pairs if l not in known]
     return [*existing, *added]
 
 
