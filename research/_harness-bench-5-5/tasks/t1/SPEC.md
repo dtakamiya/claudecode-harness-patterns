@@ -1,6 +1,6 @@
 # T1: slugify
 
-Create `slug.py` exposing `slugify(text: str, max_len: int | None = None) -> str` (Python 3.9, stdlib only).
+Create `slug.py` exposing `slugify(text: str, max_len: Optional[int] = None) -> str` (Python 3.9, stdlib only).
 
 Rules:
 1. Fold accented Latin letters to ASCII (`é` -> `e`, `ß` -> `ss`, `Æ` -> `ae`); characters with no ASCII fold that are not letters/digits are treated as separators.

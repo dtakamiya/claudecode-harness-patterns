@@ -42,6 +42,8 @@ AGENT_DEFS = {
                   "(input, expected, actual). Never edit the deliverable.",
         "tools": ["Read", "Bash", "Glob", "Grep"],
     },
+    # 構成 E が使う「advisor」は Opus をサブエージェントとして呼ぶ自作構成で、
+    # Claude Code の Advisor ツール（advisorModel）ではない。後者の計測は run_advisor_bench.py。
     "advisor": {
         "description": "Senior reviewer consulted before implementing and before finishing.",
         "prompt": "You are a senior advisor. Given SPEC.md and (if present) the draft, list the subtle requirements and "
@@ -100,13 +102,41 @@ def grade(run_dir, task):
     return max(total - failed, 0), total, "" if proc.returncode == 0 else out[-300:]
 
 
-def run_one(cfg, task, trial):
-    model, overrides, prefix, names = CONFIGS[cfg]
-    run_dir = ROOT / "runs" / f"{cfg}-{task}-n{trial}"
+def summarize_model_usage(model_usage):
+    """CLI の modelUsage をモデル別トークン・費用に要約する。欠けた項目は 0 とする。"""
+    return {m: {"in": u.get("inputTokens", 0), "out": u.get("outputTokens", 0),
+                "cache_r": u.get("cacheReadInputTokens", 0), "cache_w": u.get("cacheCreationInputTokens", 0),
+                "cost": u.get("costUSD", 0.0)}
+            for m, u in (model_usage or {}).items()}
+
+
+def prepare_run_dir(runs_subdir, name, task):
+    """空の実行ディレクトリを作り、タスクの SPEC.md を置く。"""
+    run_dir = ROOT / runs_subdir / name
     if run_dir.exists():
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True)
     shutil.copy(ROOT / "tasks" / task / "SPEC.md", run_dir / "SPEC.md")
+    return run_dir
+
+
+def finalize_record(record, run_dir, task, results_path):
+    """隠しテストで採点し、record を結果ファイルに 1 行追記する。"""
+    passed, total, note = grade(run_dir, task)
+    final = {**record, "tests_passed": passed, "tests_total": total,
+             "all_pass": bool(total) and passed == total, "grade_note": note}
+    with results_path.open("a") as fh:
+        fh.write(json.dumps(final, ensure_ascii=False) + "\n")
+    return final
+
+
+# claude の起動失敗・タイムアウト・出力の解析失敗。1 件で残りの試行を止めないよう記録して続行する
+RUN_ERRORS = (subprocess.TimeoutExpired, json.JSONDecodeError, OSError, KeyError, ValueError)
+
+
+def run_one(cfg, task, trial):
+    model, overrides, prefix, names = CONFIGS[cfg]
+    run_dir = prepare_run_dir("runs", f"{cfg}-{task}-n{trial}", task)
     cmd = ["claude", "-p", prefix + COMMON.format(deliv=TASKS[task]), "--model", model, "--effort", EFFORT,
            "--setting-sources", "project", "--no-session-persistence", "--output-format", "json",
            "--permission-mode", "acceptEdits", "--allowedTools", *ALLOWED_TOOLS,
@@ -114,26 +144,21 @@ def run_one(cfg, task, trial):
     if names:
         cmd += ["--agents", json.dumps(build_agents(names, overrides))]
     started = time.time()
-    record = {"cfg": cfg, "task": task, "trial": trial, "main_model": model}
+    base = {"cfg": cfg, "task": task, "trial": trial, "main_model": model}
     try:
         proc = subprocess.run(cmd, cwd=run_dir, capture_output=True, text=True, timeout=RUN_TIMEOUT_SEC)
         (run_dir / "claude_output.json").write_text(proc.stdout)
         data = json.loads(proc.stdout)
-        record.update(
-            cost_usd=data.get("total_cost_usd"), turns=data.get("num_turns"),
-            duration_s=round(time.time() - started, 1), is_error=data.get("is_error"),
-            terminal_reason=data.get("terminal_reason"),
-            model_usage={m: {"in": u["inputTokens"], "out": u["outputTokens"], "cache_r": u["cacheReadInputTokens"],
-                             "cache_w": u["cacheCreationInputTokens"], "cost": u["costUSD"]}
-                         for m, u in data.get("modelUsage", {}).items()},
-            subagents_spawned=data.get("subagent_stats", {}).get("spawned"),
-        )
-    except (subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
-        record.update(error=repr(exc)[:300], duration_s=round(time.time() - started, 1))
-    passed, total, note = grade(run_dir, task)
-    record.update(tests_passed=passed, tests_total=total, all_pass=bool(total) and passed == total, grade_note=note)
-    with (ROOT / "results.jsonl").open("a") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        outcome = {
+            "cost_usd": data.get("total_cost_usd"), "turns": data.get("num_turns"),
+            "is_error": data.get("is_error"), "terminal_reason": data.get("terminal_reason"),
+            "model_usage": summarize_model_usage(data.get("modelUsage")),
+            "subagents_spawned": (data.get("subagent_stats") or {}).get("spawned"),
+        }
+    except RUN_ERRORS as exc:
+        outcome = {"error": repr(exc)[:300]}
+    record = finalize_record({**base, **outcome, "duration_s": round(time.time() - started, 1)},
+                             run_dir, task, ROOT / "results.jsonl")
     print(json.dumps({k: record.get(k) for k in ("cfg", "task", "cost_usd", "turns", "duration_s",
                                                   "tests_passed", "tests_total")}), flush=True)
 

@@ -13,7 +13,8 @@
 ## 条件
 
 - タスク: `tasks/t1`（slugify）、`t2`（TTLCache）、`t3`（cron next_run）。隠しテストで採点。
-- effort: 全構成 `medium`。`--setting-sources project` でユーザー設定を除外し、構成の差だけにした。
+- effort: 全構成 `medium`。`--setting-sources project` でユーザーの settings.json（既定モデル・advisorModel など）を除外した。
+- ユーザーの `~/.claude/CLAUDE.md` と `~/.claude/rules/` は除外できておらず、全構成に同じ内容が読み込まれていた（実行後に確認。ユーザー側のエージェント定義は読み込まれていない）。構成間の比較には影響しないが、他の環境では費用・挙動が変わりうる。
 - Advisor の有効化: `--settings '{"advisorModel":"opus"}'`。デバッグログで `[AdvisorTool] Server-side tool enabled with claude-opus-5-5` を確認。
 - 呼び出し回数: stream-json の `server_tool_use`（name=`advisor`）を数えた。
 - 費用: `total_cost_usd`。Advisor 分は `modelUsage` の `claude-opus-5-5` に計上されることを確認。
@@ -51,6 +52,11 @@ SAf の内訳（Opus 分 = Advisor 2 回分）:
 - 記事（claude.dev「Which Claude model should you build with?」）の「効果は consult rate 次第」「executor 単独を明確には上回らない」という指摘と矛盾しない。
 
 ## 限界
+
+- 計測時のユーザー指示ファイル（`~/.claude/CLAUDE.md`、`~/.claude/rules/`）が読み込まれている。指示ファイルを除外する `--bare` は API キー認証が前提のため使っていない。
+- 既存の `results.jsonl`（構成 A〜E）は指示ファイルを変更する前に実行しており、本計測の S と直接は比べられない。
+- 構成 E（`run_bench.py`）の「advisor」は Opus のサブエージェントで、本計測の Advisor ツールとは別物。
+- t1 の SPEC は計測後に型注釈を `int | None` から `Optional[int]` に直した（Python 3.9 で動かないため）。本計測の t1 は修正前の SPEC で実行した。
 
 - 全構成が全問正解のため、品質の差は測れていない。Advisor が効くかは「Sonnet 単独で落ちるタスク」でしか分からない。
 - ヘッドレス実行の結果。対話セッションでは Advisor の使い方を指示するシステムプロンプトが入る場合があり（例: 「作業前と完了前に呼ぶ」）、呼び出し頻度は SAn より SAf に近い可能性がある。未計測。

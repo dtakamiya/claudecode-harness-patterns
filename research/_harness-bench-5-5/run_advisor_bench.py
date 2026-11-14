@@ -9,11 +9,11 @@
 """
 import argparse
 import json
-import shutil
 import subprocess
 import time
 
-from run_bench import COMMON, EFFORT, PER_RUN_BUDGET_USD, ROOT, RUN_TIMEOUT_SEC, TASKS, grade
+from run_bench import (COMMON, EFFORT, PER_RUN_BUDGET_USD, ROOT, RUN_ERRORS, RUN_TIMEOUT_SEC, TASKS,
+                       finalize_record, prepare_run_dir, summarize_model_usage)
 
 RESULTS = ROOT / "results_advisor.jsonl"
 TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
@@ -31,20 +31,32 @@ CONFIGS = {
 }
 
 
-def count_advisor_calls(stream_lines):
-    """stream-json の assistant メッセージから advisor の server_tool_use 回数を数える。"""
-    calls = 0
+def parse_events(stream_lines):
+    """stream-json の各行を dict にする。JSON でない行は捨てる。"""
+    events = []
     for line in stream_lines:
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if ev.get("type") != "assistant":
-            continue
-        for block in ev.get("message", {}).get("content", []):
-            if block.get("type") in ("server_tool_use", "tool_use") and block.get("name") == "advisor":
-                calls += 1
-    return calls
+        if isinstance(ev, dict):
+            events.append(ev)
+    return events
+
+
+def find_result_event(stream_lines):
+    """最後の result イベントを返す。無ければ None。"""
+    return next((ev for ev in reversed(parse_events(stream_lines)) if ev.get("type") == "result"), None)
+
+
+def count_advisor_calls(stream_lines):
+    """stream-json の assistant メッセージから advisor の server_tool_use 回数を数える。"""
+    return sum(
+        1
+        for ev in parse_events(stream_lines) if ev.get("type") == "assistant"
+        for block in (ev.get("message") or {}).get("content") or []
+        if block.get("type") in ("server_tool_use", "tool_use") and block.get("name") == "advisor"
+    )
 
 
 def build_cmd(cfg, task):
@@ -58,40 +70,33 @@ def build_cmd(cfg, task):
     return cmd
 
 
-def summarize(result_event):
+def summarize(result_event, lines):
     return {
         "cost_usd": result_event.get("total_cost_usd"),
         "turns": result_event.get("num_turns"),
         "is_error": result_event.get("is_error"),
-        "model_usage": {m: {"out": u["outputTokens"], "cost": round(u["costUSD"], 5)}
-                        for m, u in result_event.get("modelUsage", {}).items()},
+        "model_usage": summarize_model_usage(result_event.get("modelUsage")),
+        "advisor_calls": count_advisor_calls(lines),
     }
 
 
 def run_one(cfg, task, trial):
-    run_dir = ROOT / "runs_advisor" / f"{cfg}-{task}-n{trial}"
-    if run_dir.exists():
-        shutil.rmtree(run_dir)
-    run_dir.mkdir(parents=True)
-    shutil.copy(ROOT / "tasks" / task / "SPEC.md", run_dir / "SPEC.md")
-    record = {"cfg": cfg, "task": task, "trial": trial, "effort": EFFORT}
+    run_dir = prepare_run_dir("runs_advisor", f"{cfg}-{task}-n{trial}", task)
+    base = {"cfg": cfg, "task": task, "trial": trial, "effort": EFFORT}
     started = time.time()
     try:
         proc = subprocess.run(build_cmd(cfg, task), cwd=run_dir, capture_output=True, text=True,
                               timeout=RUN_TIMEOUT_SEC)
         (run_dir / "stream.jsonl").write_text(proc.stdout)
         lines = proc.stdout.splitlines()
-        result_event = next((json.loads(l) for l in reversed(lines) if '"type":"result"' in l), None)
+        result_event = find_result_event(lines)
         if result_event is None:
             raise ValueError("no result event; stderr=" + proc.stderr[-200:])
-        record.update(summarize(result_event), advisor_calls=count_advisor_calls(lines))
-    except (subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as exc:
-        record["error"] = repr(exc)[:300]
-    record["duration_s"] = round(time.time() - started, 1)
-    passed, total, note = grade(run_dir, task)
-    record.update(tests_passed=passed, tests_total=total, all_pass=bool(total) and passed == total, grade_note=note)
-    with RESULTS.open("a") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        outcome = summarize(result_event, lines)
+    except RUN_ERRORS as exc:
+        outcome = {"error": repr(exc)[:300]}
+    record = finalize_record({**base, **outcome, "duration_s": round(time.time() - started, 1)},
+                             run_dir, task, RESULTS)
     print(json.dumps({k: record.get(k) for k in ("cfg", "task", "trial", "cost_usd", "advisor_calls",
                                                   "tests_passed", "tests_total", "error")}), flush=True)
 

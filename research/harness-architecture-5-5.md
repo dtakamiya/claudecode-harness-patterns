@@ -80,7 +80,7 @@
   - B: 現行 3 役 Sonnet 5.5 + sprint
   - C: 簡素化版（planner + generator + 最後 1 回の evaluator）Sonnet 5.5
   - D: C の generator を Haiku 5.5、evaluator は Sonnet 5.5
-  - E: Haiku 5.5 実行 + Opus 5.5 advisor
+  - E: Haiku 5.5 実行 + Opus 5.5 の advisor サブエージェント（自作構成。Claude Code の Advisor ツールとは別物で、そちらは `advisor-cost-measurement.md`）
 - タスク: 難易度 3 段（単独で確実に解ける / 中 / 単独では怪しい）。決定的テストがあるものを優先。
 - 統制: effort 固定（Medium）、サブエージェントの深さ・同時数に上限、各条件 n≥3、pass^k も記録。
 - 指標: トークン→価格表で換算したコスト、往復数、所要時間、テスト合格率、ルーブリック採点（採点者は実行モデルと別モデルで盲検）。
