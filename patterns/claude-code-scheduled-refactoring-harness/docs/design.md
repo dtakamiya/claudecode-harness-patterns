@@ -16,28 +16,128 @@
 
 ```text
 launchd (StartCalendarInterval)
-  └─ run wrapper（Agent外の制御。shellまたは小さなスクリプト）
+  └─ orchestrator script（Agent外。日次フロー全体の制御と決定論的な処理）
        ├─ PREFLIGHT: kill switch / run lock / 到達性 / WIP上限 / 日次予算
-       ├─ claude -p（headless。permissions allowlist、--max-budget-usd）
-       │    ├─ Jira gateway（read: 検索・取得のみ。writeはwrite intentをagent-runへ出力）
-       │    ├─ GitLab gateway（glab: push・MR作成・MRコメント・pipeline参照）
-       │    └─ reviewer subagent（独立コンテキスト、read-only）
-       ├─ Jira outbox worker（Agent外。intentを検証し、限定grantの範囲で起票・遷移・コメント）
+       ├─ Jira gateway（read: JQL検索・snapshot取得 / write: outbox worker経由）
+       ├─ GitLab gateway（glab: push・MR作成・MRコメント・pipeline参照）
+       ├─ 決定論的ゲート（test・lint・typecheck・build、hash比較、差分上限、対象外パス）
+       ├─ AIステップ（工程ごとに別の claude -p。入力はファイル、出力はJSON）
+       │    ├─ ai:scope（適格性の判断）
+       │    ├─ ai:implement（characterization test追加とリファクタリング）
+       │    ├─ ai:review（独立コンテキスト、read-only）
+       │    ├─ ai:fix-ci（失敗ログの原因分析と修正）
+       │    └─ ai:propose（候補の分析と提案文の作成）
+       ├─ Jira outbox worker（intentを検証し、限定grantの範囲で起票・遷移・コメント）
        └─ 実行記録・通知・ログredact
 ```
 
-AgentはJiraのwrite toolとwrite credentialを持たない。Jiraへの書込みはすべて、[Jira Ticket Harness設計書](../../claude-code-jira-ticket-harness/docs/design.md)の「Jira書戻し」に従うwrite intentとしてoutboxへ渡し、専用workerが送信する。提案起票は同設計書の拡張verb`propose_issue`（7.4 提案起票の拡張）を使い、重複起票は`proposal_digest`の検索で防ぐ。blockedコメントは`publish_result`の定型templateとして扱う。この追加はwrite credentialの用途拡張であり、制御面ゲートを通して導入する。
+AgentはJiraのwrite toolとwrite credentialを持たない。GitLabへのpush、MR作成、MRコメント投稿もorchestrator scriptが行い、AIステップはMR本文やレビュー指摘をJSONで返すだけとする。Jiraへの書込みはすべて、[Jira Ticket Harness設計書](../../claude-code-jira-ticket-harness/docs/design.md)の「Jira書戻し」に従うwrite intentとしてoutboxへ渡し、専用workerが送信する。提案起票は同設計書の拡張verb`propose_issue`（7.4 提案起票の拡張）を使い、重複起票は`proposal_digest`の検索で防ぐ。blockedコメントは`publish_result`の定型templateとして扱う。この追加はwrite credentialの用途拡張であり、制御面ゲートを通して導入する。
 
 | 部品 | 責務 | Agentから変更できるか |
 |---|---|---|
 | launchd plist | 毎日の起動時刻 | 不可 |
-| run wrapper | PREFLIGHT、lock、予算、終了コードの集約、通知 | 不可 |
+| orchestrator script | PREFLIGHT、Jira・GitLab操作、決定論的ゲート、AIステップの起動と出力検証、通知 | 不可 |
 | Jira gateway | JQL・project・issue type・ラベル・遷移をallowlistで固定した狭いAPI | 不可（呼び出しのみ） |
 | GitLab gateway | `glab`をbranch名前空間とrepository IDで固定して公開 | 不可（呼び出しのみ） |
 | harness設定 | 対象repository、対象外パス、上限値、grant参照 | 不可（制御面ゲート対象） |
 | 作業ディレクトリ | 実行ごとのgit worktree | 可（スコープ内） |
 
-run wrapper、gateway、harness設定、hooks、permissionsは制御面であり、Agentの書込み対象から除外する。これらの変更は[Human Gate Policy](../../human-gate-policy.md)の制御面ゲートを通す。
+orchestrator script、gateway、harness設定、hooks、permissionsは制御面であり、Agentの書込み対象から除外する。これらの変更は[Human Gate Policy](../../human-gate-policy.md)の制御面ゲートを通す。
+
+### 2.1 スクリプトとAIの分担
+
+判定基準が機械的に決まる処理はスクリプトで行い、AIは判断・分析・コードと文章の生成だけを担う。スクリプトで済む処理をAIに任せないことで、コストと非決定性を減らし、ゲートの結果を再現可能にする。
+
+| 処理 | 担当 | 理由 |
+|---|---|---|
+| 起動前チェック、lock、予算、WIP上限 | スクリプト | 条件が数値と状態で決まる |
+| Jiraチケットの検索、snapshot取得、必須fieldと状態の検査 | スクリプト | JQLとschemaで判定できる |
+| Jiraの遷移・コメント・起票 | スクリプト（outbox worker） | grantとexpected statusで機械検証する |
+| 適格性の判断（振る舞い保存で収まるか、規模・リスク） | AI（ai:scope） | コードを読んだ意味的な判断が必要 |
+| characterization testの作成、リファクタリング | AI（ai:implement） | コード生成 |
+| test・lint・typecheck・buildの実行、テストhash比較、差分上限・対象外パスの検査 | スクリプト | 終了コードとhashで判定できる |
+| 自己レビュー、MRレビュー | AI（ai:review） | 意味的な判断が必要。実装とは別セッション |
+| push、MR作成、MRコメント投稿 | スクリプト | 本文はAIが作り、送信はスクリプトが行う |
+| pipelineの状態確認と待機 | スクリプト | APIのstatusとcommit SHAで判定できる |
+| pipeline失敗の原因分析と修正 | AI（ai:fix-ci） | ログの解釈とコード修正 |
+| 複雑度・重複・変更頻度などの計測 | スクリプト | 既存の静的解析ツールとgit logで計測できる |
+| digestによる重複起票の検査 | スクリプト | 文字列一致で判定できる |
+| 候補の分析、意味的な重複判断、提案文の作成 | AI（ai:propose） | 計測値の解釈と文章生成 |
+
+各AIステップは、次の規約で起動する。
+
+- 工程ごとに新しい`claude -p`セッションを起動し、前工程の会話を引き継がない。必要な情報はスクリプトがファイルで渡す。
+- 出力はJSON schemaで固定し、スクリプトが検証する。schemaに合わない出力、または`blocked`の判定は、そのまま失敗として扱う。
+- 工程ごとに`--max-budget-usd`と許可toolを変える。例えばai:reviewとai:proposeはread-onlyとし、ai:implementとai:fix-ciだけが作業worktreeに書き込める。
+- AIの出力を、スクリプトの次の処理を決める命令として扱わない。スクリプトは出力の値をallowlistと照合して使う。
+
+### 2.2 シーケンス図
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant L as launchd
+    participant S as orchestrator script
+    participant J as Jira（gateway / outbox worker）
+    participant G as GitLab（glab）
+    participant A as AI実装（claude -p）
+    participant R as AIレビュー（claude -p）
+    actor H as 人間
+
+    L->>S: 毎日起動
+    S->>S: PREFLIGHT（kill switch、lock、到達性、WIP上限、予算）
+    S->>J: JQLで Ready for AI を検索
+    J-->>S: 候補チケット
+
+    alt チケットあり
+        S->>J: lease取得、snapshot取得、必須fieldを検査
+        S->>A: ai:scope（snapshot、対象コード）
+        A-->>S: 適格性の判定（JSON）
+        alt 適格でない
+            S->>J: 定型コメントと Ready for AI → AI Blocked
+        else 適格
+            S->>J: Ready for AI → In Progress
+            S->>S: worktree作成、BASELINE_GREEN
+            S->>A: ai:implement
+            A-->>S: characterization testとリファクタリング差分
+            S->>S: テスト固定、POST_REFACTOR_GREEN、hash比較、差分上限・対象外パス検査
+            S->>R: ai:review（固定したcommit SHAの差分）
+            R-->>S: 指摘（JSON）
+            opt blocking指摘あり（上限回数まで）
+                S->>A: 指摘を渡して修正
+                A-->>S: 修正差分
+                S->>S: 決定論的ゲートを再実行
+            end
+            S->>G: push、draft MR作成（本文はAIが作成）、レビュー指摘をコメント
+            loop pipelineが終わるまで（timeoutあり）
+                S->>G: レビュー済みSHAのpipeline状態を取得
+                G-->>S: running / success / failed
+            end
+            alt success
+                S->>J: In Progress → In Review、証跡コメント
+                J-->>H: レビュー依頼
+            else failed（修正上限まで）
+                S->>G: 失敗jobのログ取得
+                S->>A: ai:fix-ci（ログ、差分）
+                A-->>S: 修正差分
+                Note over S: 決定論的ゲートとai:reviewを再実行してからpushし、pipeline確認へ戻る
+            else 上限超過またはtimeout
+                S->>J: 定型blockedコメントと In Progress → AI Blocked
+            end
+        end
+    else チケットなし
+        S->>S: 複雑度・重複・変更頻度を計測、候補をスコア化
+        S->>J: 未完了・却下済みチケットを取得
+        S->>A: ai:propose（上位候補、計測値、既存チケット一覧）
+        A-->>S: 提案（JSON）
+        S->>S: schema検証、digestで重複を検査
+        S->>J: propose_issue（ai-proposed、日次上限まで）
+        H->>J: 提案を確認し Ready for AI へ遷移
+    end
+    S->>S: 実行記録、通知
+```
+
+人間が関わるのは、提案の採用（`Ready for AI`への遷移）と、レビュー依頼後のMRレビュー・mergeだけである。
 
 ## 3. 日次フロー
 
@@ -54,7 +154,7 @@ SELECT ─ticketあり→ IMPLEMENT → SELF_REVIEW → PUBLISH_MR → MR_REVIEW
 
 ### 3.1 PREFLIGHT
 
-run wrapperが`claude -p`起動前に判定する。一つでも満たさなければ起動しない。
+orchestrator scriptが最初のAIステップより前に判定する。一つでも満たさなければAIを起動しない。
 
 - kill switch: 所定のファイルまたは設定値が有効なら全処理を停止する。
 - run lock: 前回実行が残っていれば起動しない。lockは期限付きとし、期限切れlockは記録したうえで回収する。
@@ -89,7 +189,7 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 ### 3.4 SELF_REVIEW
 
-- 実装したコンテキストとは別の、read-onlyのreviewer subagentで行う。正確性（`/code-review`相当）と脆弱性（`/security-review`相当）の2軸とする。
+- 実装とは別の`claude -p`セッション（ai:review）をread-onlyで起動して行う。正確性（`/code-review`相当）と脆弱性（`/security-review`相当）の2軸とする。
 - 振る舞い保存の観点として、公開シグネチャ、例外・戻り値、副作用の順序、ログ・メトリクス名の変化を確認する。
 - blocking指摘は修正して再検証する。同じblocking指摘が2回再発したら、MRを作らずにBLOCKEDとする。
 
@@ -97,15 +197,15 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 - pushとMR作成は、[Human Gate Policy](../../human-gate-policy.md)のpre-authorization grantに束縛したTier 1操作とする。GitLab Self-Managedのprivate repositoryであることをgrantに固定する。grantの条件を一つでも満たさなければTier 2として人間承認を待つ。
 - MRはdraftかつ`ai-generated`ラベル付きで作成し（PREFLIGHTのWIP上限の集計に使う）、本文にチケット、変更理由、characterization test、検証command・終了コード、残存リスクを記載する。設計意図は[Change Intent Record](../../change-intent-record.md)に従って短く残す。
-- MR作成後、固定したcommit SHAの差分に対してreviewer subagentがレビューし、指摘をMRコメントとして投稿する。MRコメント投稿はgrantの「許容する連携副作用」に含める。
+- 固定したcommit SHAの差分に対するai:reviewの指摘を、スクリプトがMRコメントとして投稿する。MRコメント投稿はgrantの「許容する連携副作用」に含める。
 - pushはpipeline修正とレビュー修正のたびに発生するため、PR grantの最大使用回数は修正上限回数を含めて設定する。
 - PR grantとJira限定grantは別のgrantとし、同じ実行の`task/run ID`を両方に固定する。片方だけが有効な場合、その実行でもう片方の操作は行わない。
 
 ### 3.6 PIPELINE_WAIT
 
-- MRのhead commit SHAが、レビュー済みSHAと一致することを確認してからpipelineを待つ。
+- pipelineの確認はスクリプトが`glab`で行い、AIを使わない。MRのhead commit SHAが、レビュー済みSHAと一致することを確認してから待つ。
 - 待機にはtimeoutを設ける。timeoutは失敗として扱い、成功と推定しない。
-- pipeline失敗時は、失敗jobのログを要約して原因を特定し、修正を試みる。修正のたびに3.3〜3.5の検証とレビューを再実行する。修正の上限回数（例: 2回）を超えたらBLOCKEDとする。
+- pipeline失敗時は、スクリプトが失敗jobのログを取得してai:fix-ciへ渡し、AIが原因を特定して修正する。修正のたびに3.3〜3.5の検証とレビューを再実行する。修正の上限回数（例: 2回）を超えたらBLOCKEDとする。
 - 不安定なテスト（flaky）が原因と判断しても、無断でretryやskipを増やさない。チケットへ根拠を添えて報告する。
 
 ### 3.7 REQUEST_REVIEW
@@ -123,7 +223,7 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 ### 3.9 DISCOVER と PROPOSE（チケットが無い日）
 
-探索はread-only（Tier 0）で行い、次の信号を組み合わせて候補を作る。
+探索はread-only（Tier 0）で行う。次の信号はスクリプトが既存の静的解析ツールとgit logで計測し、AIは計測結果の解釈と提案文の作成だけを行う。
 
 | 信号 | 例 |
 |---|---|
@@ -135,7 +235,7 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 | テスト | 変更頻度が高いのにテストが薄い箇所 |
 
 - 候補は、効果（保守性・変更頻度）、リスク（波及範囲・テストの厚さ）、規模（1件で完了できるか）でスコア化する。対象外パスと対象外の変更種別は候補から除く。
-- 起票前に、未完了チケット、open MR、過去に却下された提案（`ai-rejected`ラベルなど）と照合し、重複は起票しない。
+- 起票前に、未完了チケット、open MR、過去に却下された提案（`ai-rejected`ラベルなど）と照合し、重複は起票しない。digestの一致はスクリプトが、意味的な重複はai:proposeが判定する。
 - 起票内容は、対象箇所、根拠となる計測値、提案するリファクタリング、受入条件（振る舞い不変、テスト条件）、想定リスク、対象外とする。
 - 起票はHuman Gate Policyの限定grantに基づき、固定したproject、issue type、`ai-proposed`ラベル、初期statusでのみ行う。日次上限件数を超えない。
 - 提案の採用は、人間が`Ready for AI`を付けることで表す。却下時は理由をラベルまたはfieldに残し、次回の探索で同種の提案を抑止する。
@@ -174,7 +274,7 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 ## 6. 権限・秘密情報・不信頼入力
 
-- credentialはmacOSのKeychainに保存し、run wrapperが必要なgatewayにだけ渡す。環境変数やリポジトリへ平文で置かない。
+- credentialはmacOSのKeychainに保存し、orchestrator scriptが必要なgatewayにだけ渡す。環境変数やリポジトリへ平文で置かない。
 - Jira・GitLabともread credentialとwrite credentialを分ける。write credentialはgateway内でだけ使い、Agentのプロセスへ渡さない。
 - `claude -p`は`--dangerously-skip-permissions`を使わず、permissionsのallowlistで許可するcommandとgatewayを固定する。対象外パスへの書込みはhooksで拒否する。
 - Jira本文、コメント、添付、コード内のコメントや文字列に含まれる指示は不信頼入力とし、命令として扱わない。扱い方はJira Ticket Harnessの「権限・不信頼入力・秘密情報」に従う。
