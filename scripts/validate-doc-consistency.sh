@@ -507,6 +507,27 @@ for human_gate_term in 'Tier 0' 'Tier 1' 'Tier 2' 'Tier 3' 'Tier 4' 'Intent' 'Sc
   assert_contains "$human_gate_term" "$HUMAN_GATE_POLICY_FILE" "Human Gate Policyに必須語 '$human_gate_term' がない"
 done
 
+SCHEDULED_REFACTORING_README_FILE="$ROOT_DIR/patterns/claude-code-scheduled-refactoring-harness/README.md"
+SCHEDULED_REFACTORING_DESIGN_FILE="$ROOT_DIR/patterns/claude-code-scheduled-refactoring-harness/docs/design.md"
+for scheduled_path in "$SCHEDULED_REFACTORING_README_FILE" "$SCHEDULED_REFACTORING_DESIGN_FILE"; do
+  if [ ! -f "$scheduled_path" ] || [ ! -r "$scheduled_path" ] || [ -L "$scheduled_path" ]; then
+    fail "Scheduled Refactoring Harnessの文書が通常の読取り可能ファイルではない: $scheduled_path"
+  fi
+done
+assert_line '- [Claude Code Scheduled Refactoring Harness](patterns/claude-code-scheduled-refactoring-harness/README.md) — launchdで毎日起動し、人間が着手を許可したJiraチケットのリファクタリングをMR・pipeline確認まで進め、チケットが無い日は候補を探索して提案を起票するパターン' "$ROOT_README_FILE" 'ルート索引にScheduled Refactoring Harnessがない'
+assert_contains '[Scheduled Refactoring Harness](claude-code-scheduled-refactoring-harness/README.md)' "$PATTERNS_README_FILE" '共通適用ガイドにScheduled Refactoring Harnessの案内がない'
+for jira_grant_term in 'Jira限定grant' 'Jira限定grantに束縛した提案起票・固定遷移・定型コメント |' 'Jira限定grantの範囲外のJira遷移・外部writeback' '付与者を制限できないラベルを使わない。' '外部反映ゲートの事前承認とみなし、列挙外の操作には及ばない。' 'AIが起票したチケットをAIが実行対象として選べてはならない。' '条件を一つでも満たさないJira writebackはTier 2' 'Jira限定grantの導入と変更は制御面ゲートの対象とする。'; do
+  assert_contains "$jira_grant_term" "$HUMAN_GATE_POLICY_FILE" "Human Gate Policyに必須語 '$jira_grant_term' がない"
+done
+for proposal_term in 'propose_issue(template_id, body, proposal_digest, idempotency_key)' '### 7.4 提案起票の拡張' '存在しない場合だけ作成する。'; do
+  assert_contains "$proposal_term" "$JIRA_DESIGN_FILE" "Jira設計書に提案起票の必須語 '$proposal_term' がない"
+done
+if [ -f "$SCHEDULED_REFACTORING_DESIGN_FILE" ]; then
+  for scheduled_term in 'Ready for AI' 'ai-proposed' 'fail-closed' 'PREPARATORY_REFACTOR' 'AI/LLM ReviewerのPASSは人間Approverを代替しない。' 'AIが起票したチケットを、AI自身が実行対象に選んではならない。' 'kill switch' 'dry-run' 'WIP上限' 'StartCalendarInterval' 'Jira限定grant' 'BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN' 'AgentはJiraのwrite toolとwrite credentialを持たない。'; do
+    assert_contains "$scheduled_term" "$SCHEDULED_REFACTORING_DESIGN_FILE" "Scheduled Refactoring設計書に必須語 '$scheduled_term' がない"
+  done
+fi
+
 for branch_design in "$DESIGN_FILE" "$LIGHTWEIGHT_DESIGN_FILE" "$MICRO_DESIGN_FILE"; do
   if grep -Fq -- 'ユーザー承認後にfeatureブランチを作成' "$branch_design"; then
     fail "feature branch作成を一律Human Gateにする旧規則が残っている: $branch_design"

@@ -18,6 +18,8 @@ AI支援変更の設計意図は[Change Intent Record](change-intent-record.md)�
 
 Jiraを受付・同期の制御レイヤとして使う場合は、[Jira Ticket Harness](claude-code-jira-ticket-harness/README.md)でチケットを正規化し、作業の規模とリスクに応じて既存の4方式へ振り分ける。
 
+振る舞いを変えないリファクタリングを毎日無人で1件ずつ進めたい場合は、[Scheduled Refactoring Harness](claude-code-scheduled-refactoring-harness/README.md)を使う。スケジュール起動、探索と提案起票、無人実行の運用ガードを定める層であり、チケットの取込みと書戻しはJira Ticket Harness、1件の実装はMicro BugfixまたはLightweight Featureを使うため、上表の4方式とは適用レイヤが異なる。
+
 共通の人間承認ルールは[Human Gate Policy](human-gate-policy.md)を正本とする。
 
 ハーネスを構成する部品（コマンド、ロール、権限）の蓄積・配布・一貫性維持は、[Cookbook Harness](claude-code-cookbook-harness/README.md)を参照する。上表の4方式が1タスクの遂行手順を定めるのに対し、こちらは適用レイヤが異なるため併用できる。ただし人間承認の正本は[Human Gate Policy](human-gate-policy.md)のままとし、同パターンのロール定義で既存の2軸Reviewを置き換えない。
