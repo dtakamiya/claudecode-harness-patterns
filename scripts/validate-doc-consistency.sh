@@ -523,7 +523,7 @@ for proposal_term in 'propose_issue(template_id, body, proposal_digest, idempote
   assert_contains "$proposal_term" "$JIRA_DESIGN_FILE" "Jira設計書に提案起票の必須語 '$proposal_term' がない"
 done
 if [ -f "$SCHEDULED_REFACTORING_DESIGN_FILE" ]; then
-  for scheduled_term in 'Ready for AI' 'ai-proposed' 'fail-closed' 'PREPARATORY_REFACTOR' 'AI/LLM ReviewerのPASSは人間Approverを代替しない。' 'AIが起票したチケットを、AI自身が実行対象に選んではならない。' 'kill switch' 'dry-run' 'WIP上限' 'StartCalendarInterval' 'Jira限定grant' 'BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN' 'AgentはJiraのwrite toolとwrite credentialを持たない。'; do
+  for scheduled_term in 'Ready for AI' 'ai-proposed' 'fail-closed' 'PREPARATORY_REFACTOR' 'AI/LLM ReviewerのPASSは人間Approverを代替しない。' 'AIが起票したチケットを、AI自身が実行対象に選んではならない。' 'kill switch' 'dry-run' 'WIP上限' 'StartCalendarInterval' 'Jira限定grant' 'BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN' '### 2.3 claude -p の起動設定' '--permission-mode dontAsk --permission-prompts none' 'failIfUnavailable' 'allowUnsandboxedCommands' 'structured_output' '--max-turns' 'hooksに依存するガードは置かない。' 'AgentはJiraのwrite toolとwrite credentialを持たない。'; do
     assert_contains "$scheduled_term" "$SCHEDULED_REFACTORING_DESIGN_FILE" "Scheduled Refactoring設計書に必須語 '$scheduled_term' がない"
   done
 fi

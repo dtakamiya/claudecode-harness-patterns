@@ -19,7 +19,7 @@
 - 公開API、DB schema・migration、認証・認可、秘密情報の境界に触れる変更
 - MRのmerge、release、デプロイ（Tier 2以上のため人間が行う）
 - AIが起票したチケットを、人間の着手判断なしに実行すること
-- `--dangerously-skip-permissions`による無制限実行
+- `--dangerously-skip-permissions`による無制限実行（AIステップは`--bare`、`dontAsk`、範囲を絞った許可、sandboxで起動する）
 
 ## 実行フロー
 
@@ -44,7 +44,7 @@ Jiraチケットの検査、テスト・lintなどのゲート、push・MR作成
 
 1. 対象repository、JQL、`Ready for AI`と`AI Blocked`のstatus、`ai-proposed`ラベル、遷移mapping、対象外パスをallowlistで定義する。`Ready for AI`への遷移はworkflowで人間のgroupに限定する。
 2. Jira・GitLabのread credentialとwrite credentialを分け、Keychainへ保存する。AgentにはJiraのwrite credentialを渡さず、Jiraへの書込みはoutbox workerだけが行う。
-3. orchestrator scriptとlaunchd plistを用意し、最初はdry-runで提案と差分をローカルに出力するだけにする。
+3. orchestrator script、AIステップごとの設定ファイル（deny規則、sandbox、出力schema、上限）、launchd plistを用意し、最初はdry-runで提案と差分をローカルに出力するだけにする。
 4. 1 repositoryで提案起票だけを有効にし、人間の採用率と却下理由を観察する。
 5. 実装・MR作成を有効にし、最後にIn Review遷移の限定grantを有効にする。
 

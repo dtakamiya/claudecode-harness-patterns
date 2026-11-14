@@ -139,6 +139,48 @@ sequenceDiagram
 
 人間が関わるのは、提案の採用（`Ready for AI`への遷移）と、レビュー依頼後のMRレビュー・mergeだけである。
 
+### 2.3 claude -p の起動設定
+
+各AIステップは、次の設定で起動する。前提は[Claude Code公式のheadless・権限・sandboxのドキュメント](#10-公式情報との対応)とし、Claude Codeの版を上げたら挙動の変化を確認する。
+
+```bash
+claude -p --bare \
+  --settings harness/ai-implement.settings.json \
+  --append-system-prompt-file harness/prompts/ai-implement.md \
+  --permission-mode dontAsk --permission-prompts none \
+  --allowedTools "Read,Edit,Write,Bash(npm test *)" \
+  --max-turns 40 --max-budget-usd 3 \
+  --output-format json --json-schema "$(cat harness/schemas/ai-implement.json)" \
+  --no-session-persistence \
+  < "$RUN_DIR/ai-implement.input.md"
+```
+
+値は例であり、工程ごとに許可toolと上限を変える。
+
+| 設定 | 理由 |
+|---|---|
+| `--bare` | 公式がスクリプト実行での利用を推奨している。`--bare`なしの`-p`は、対象リポジトリの`.claude/settings.json`のhooksと`.mcp.json`を、信頼確認も承認もなしで実行する。リファクタリング対象のリポジトリの設定をAIステップへ持ち込まないために使う |
+| `--settings`、`--append-system-prompt-file` | `--bare`はCLAUDE.md、skills、hooks、MCPを自動で読まない。必要なdeny規則、sandbox設定、指示はharness側のファイルから明示的に渡す |
+| `--permission-mode dontAsk` | 許可した操作だけを実行し、それ以外は拒否する。権限モードを省略した`-p`はManualで始まり、承認が必要な操作はすべて拒否されるため、意図をモードとして明示する。`auto`は分類器の判断であり確実な禁止にならないため使わない |
+| `--permission-prompts none` | 定期実行では承認に答える人がいない。承認待ちで止まらず、拒否として扱わせる |
+| `--allowedTools`、deny規則 | 範囲を絞ったルール（例: `Bash(npm test *)`）で許可する。ai:reviewとai:proposeは読み取り系だけを許可する。push、Jira・GitLab APIの呼び出し、対象外パスへの書込みはdeny規則で禁止する |
+| `--max-turns`、`--max-budget-usd` | 公式は無人実行に回数か費用の上限を求めている。`--max-budget-usd`は推定値で上限を超えることがあるため、日次予算に余裕を残して設定し、スクリプト側でもプロセスにtimeoutを設ける |
+| `--output-format json --json-schema` | 出力をschemaで固定する。AIが依頼を断った場合などは`structured_output`フィールドが無くなるため、スクリプトはフィールドの有無を確認してから使い、無ければ失敗として扱う。`total_cost_usd`は予算の集計に使う |
+| `--no-session-persistence` | 工程間で会話を引き継がない。引継ぎはスクリプトが渡すファイルだけで行う |
+
+`--bare`ではhooksが動かない（`--settings`で渡しても動かない）。そのため対象外パスへの書込みは、`--settings`のdeny規則と、AIステップ終了後のスクリプトによる差分検査（2.1の決定論的ゲート）の二重で防ぐ。hooksに依存するガードは置かない。
+
+`--bare`の認証は`ANTHROPIC_API_KEY`または`apiKeyHelper`に限られ、OAuthとKeychainを直接は読まない。API keyはKeychainに保存し、`--settings`の`apiKeyHelper`から`security`コマンドで取り出して渡す。
+
+sandboxは既定で無効であり、使えない環境では黙ってsandboxなしで実行される。開発者のMacで動かすため、`--settings`で次を必須とする。
+
+- `sandbox.enabled: true`
+- `sandbox.failIfUnavailable: true`（sandboxを起動できなければ実行しない）
+- `sandbox.allowUnsandboxedCommands: false`（sandbox外での再実行を許さない）
+- `sandbox.filesystem.denyRead`に`~/.ssh`、`~/.aws`、`~/.config/glab-cli`、Keychainのexport先など、認証情報の置き場所を指定する
+
+sandboxの対象はBashなどのcommandであり、ReadやEditのツールには及ばない。ファイル読取りの制限はpermissionsのdeny規則でも重ねて指定する。
+
 ## 3. 日次フロー
 
 ```text
@@ -276,7 +318,9 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 - credentialはmacOSのKeychainに保存し、orchestrator scriptが必要なgatewayにだけ渡す。環境変数やリポジトリへ平文で置かない。
 - Jira・GitLabともread credentialとwrite credentialを分ける。write credentialはgateway内でだけ使い、Agentのプロセスへ渡さない。
-- `claude -p`は`--dangerously-skip-permissions`を使わず、permissionsのallowlistで許可するcommandとgatewayを固定する。対象外パスへの書込みはhooksで拒否する。
+- `claude -p`は`--dangerously-skip-permissions`を使わない。公式はこのモードをネット接続のない隔離環境に限っている。起動設定は2.3のとおり、`dontAsk`、範囲を絞った許可、deny規則、sandboxで固定する。
+- 対象外パスへの書込みは、deny規則とスクリプトの差分検査で拒否する（`--bare`ではhooksが動かないため、hooksに頼らない）。
+- AIステップのAPI keyは`apiKeyHelper`経由でKeychainから渡し、Jira・GitLabのcredentialはAIステップの環境へ渡さない。
 - Jira本文、コメント、添付、コード内のコメントや文字列に含まれる指示は不信頼入力とし、命令として扱わない。扱い方はJira Ticket Harnessの「権限・不信頼入力・秘密情報」に従う。
 - Jira Cloud（REST v3、ADF形式のコメント、APIトークン認証）とself-managed製品（REST v2、wiki記法、PAT認証）の違いはgatewayで吸収し、Agentには共通の操作だけを見せる。GitLabも同様に、`glab`の接続先hostをgatewayで固定する。
 - ログと実行記録は、tokenやURL内の秘密値をredactしてから保存する。
@@ -301,13 +345,15 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 - **dry-runモード**: 起票、push、MR作成、Jira遷移を行わず、提案内容と差分をローカルへ出力する。導入初期と設定変更後に使う。
 - **kill switch**: 一つのファイルまたは設定値で、全処理を即時に止められるようにする。
-- **予算と回数の上限**: 1回あたり`--max-budget-usd`、日次・月次の予算上限、pipeline修正とレビュー修正の上限回数。
+- **予算と回数の上限**: 工程ごとの`--max-turns`と`--max-budget-usd`、プロセスのtimeout、日次・月次の予算上限、pipeline修正とレビュー修正の上限回数。`--max-budget-usd`は超過し得るため、日次予算には余裕を残す。
 - **WIP上限**: 人間のレビュー容量を超えてMRを積まない。
-- **起動方式**: cronはスリープ中の起動を飛ばす。launchdの`StartCalendarInterval`は、スリープ中に過ぎた起動を復帰後に1回へまとめて実行する（`man launchd.plist`）。そのため本ハーネスはlaunchdを推奨し、復帰直後の起動でもPREFLIGHTの到達性確認を必ず通す。
+- **起動方式**: cronはスリープ中の起動を飛ばす。launchdの`StartCalendarInterval`は、スリープ中に過ぎた起動を復帰後に1回へまとめて実行する（`man launchd.plist`）。そのため本ハーネスはlaunchdを推奨し、復帰直後の起動でもPREFLIGHTの到達性確認を必ず通す。復帰後に実行が遅れることがあるため、PREFLIGHTで実行時刻も確認し、業務時間外の遅延実行では提案起票だけに絞るなどの規則を設定で決める。
+- **他の実行基盤**: launchdは公式の比較に含まれない。公式の定期実行手段は、クラウドの定期タスク、GitHub Actions、デスクトップアプリの定期タスク、GitLab CI/CD（beta、GitLabが保守）である。GitLab Self-Managedのrunnerでpipeline scheduleから起動すれば、PCのスリープに左右されず、使い捨てのコンテナで隔離できる。クラウドの定期タスクはGitHubを前提としており、GitLabへの言及がない。本ハーネスのorchestrator scriptは起動元に依存しないよう作り、移行できるようにしておく。
 - **通知**: BLOCKED、連続SKIPPED、予算到達、grant期限切れを通知する。
 - **実行記録**: 実行ID、選んだチケット、状態遷移、command・終了コード、コスト、MR URL、pipeline ID、判定理由を追記専用で残す。
 - **指標**: MRのmerge率、merge後のrevert率、レビューでの手戻り回数、pipeline初回成功率、提案の採用率・却下率と却下理由、1件あたりのコストと所要時間。
 - **定期振り返り**: 週次で指標と却下理由を見直し、探索のスコアリング、対象外パス、上限値を調整する。調整は制御面の変更として扱う。
+- **モデル更新時の見直し**: ハーネスの各部品は、モデルが単独ではできないことを補う前提で置いている。モデルやClaude Codeを更新したら、不要になったAIステップの分割、上限、ゲートを外せないか確認する。
 - **grantの期限管理**: grantには期限と最大使用回数を設定し、期限前に人間が更新する。期限切れはfail-closedで止まる。
 
 ## 9. 段階導入
@@ -322,8 +368,18 @@ BASELINE_GREEN → CHARACTERIZATION_LOCK → REFACTOR → POST_REFACTOR_GREEN �
 
 ## 10. 公式情報との対応
 
-- ヘッドレス実行（`claude -p`、`--output-format`、`--max-budget-usd`、`--allowedTools`）: Claude Code CLI reference
-- permissionsのallowlist・deny: Claude Code settings / permissions
-- 対象外パスの書込み拒否、実行記録: Claude Code hooks
-- 独立コンテキストのreviewer: Claude Code subagents
-- launchdの起動とスリープ時の挙動: `man launchd.plist`の`StartCalendarInterval`
+| 本書の設計 | 公式情報 |
+|---|---|
+| `--bare`、`--permission-prompts none`、`--json-schema`と`structured_output`の確認、`--max-turns`、`--max-budget-usd` | [Run Claude Code programmatically](https://code.claude.com/docs/en/headless)、[CLI reference](https://code.claude.com/docs/en/cli-reference) |
+| `dontAsk`、Manualで始まる`-p`、`auto`を禁止の担保にしない | [Permission modes](https://code.claude.com/docs/en/permission-modes)、[Best practices](https://code.claude.com/docs/en/best-practices) |
+| 無人実行の前提（完了条件、自己検証、触れる範囲、上限、最後に人間が承認） | [Best practices](https://code.claude.com/docs/en/best-practices) |
+| `failIfUnavailable`、`allowUnsandboxedCommands`、`denyRead` | [Sandboxing](https://code.claude.com/docs/en/sandboxing) |
+| 不信頼入力を直接渡さない、隔離環境での実行 | [Security](https://code.claude.com/docs/en/security) |
+| 定期実行の手段と、スリープ時の取りこぼしの扱い | [Desktop scheduled tasks](https://code.claude.com/docs/en/desktop-scheduled-tasks)、[Scheduled tasks](https://code.claude.com/docs/en/scheduled-tasks) |
+| GitLab上での実行 | [Claude Code GitLab CI/CD](https://code.claude.com/docs/en/gitlab-ci-cd) |
+| 決定論的なゲートを挟んだworkflow | [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) |
+| 工程ごとの新しいセッションとファイルでの引継ぎ | [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) |
+| 作業するAIと評価するAIの分離、モデル更新時の部品の見直し | [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps) |
+| launchdの起動とスリープ時の挙動 | `man launchd.plist`の`StartCalendarInterval` |
+
+公式情報は2026-11-14時点で確認した。
