@@ -1,0 +1,84 @@
+{
+  "tasks": [
+    {
+      "id": "M1",
+      "title": "表変換",
+      "description": "tasks.jsonl を5列のMarkdown表に変換する（機械的変換）",
+      "prompt": "patterns/claude-code-review-skill/evals/tasks.jsonl を読み、全タスクを id/kind/measures/grader/query の5列・出現順・値そのままのMarkdown表に変換。表以外の説明文は不要。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns",
+      "checks": {
+        "contains": [
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E5",
+          "E6",
+          "E7"
+        ]
+      }
+    },
+    {
+      "id": "M2",
+      "title": "リンク検査",
+      "description": "README の Research リンク5件の実在確認。全部実在なので「壊れたリンクなし」が正解（誤検出しないか）",
+      "prompt": "README.md の «Research» セクションのリンクだけを対象に、リンク先ファイルの実在を検査。壊れたリンクだけ列挙。全実在なら「壊れたリンクなし」とだけ報告。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns",
+      "checks": {
+        "contains": [
+          "壊れたリンクなし"
+        ]
+      }
+    },
+    {
+      "id": "X1",
+      "title": "用語検索",
+      "description": "「反証ゲート」の出現箇所を file:line で列挙し、定義/言及に分類（探索）",
+      "prompt": ".claude/worktrees/ を除くリポジトリ全体で「反証ゲート」の出現箇所をすべて file:line で列挙。各箇所が定義・説明か単なる言及・参照かも添える。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns"
+    },
+    {
+      "id": "X2",
+      "title": "フロントマター表",
+      "description": "全 SKILL.md の allowed-tools / disallowed-tools / model を表にする（探索・4スキルが正解）",
+      "prompt": ".claude/worktrees/ を除く全 SKILL.md の allowed-tools / disallowed-tools / model を、スキル名を行にした表に。無いフィールドは「（指定なし）」。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns",
+      "checks": {
+        "contains": [
+          "harness-orchestration",
+          "tdd-development",
+          "jira-incident-review",
+          "diff-review"
+        ]
+      }
+    },
+    {
+      "id": "D1",
+      "title": "新パターン提案",
+      "description": "既存パターンの空白を埋める軽量パターンを1案提案（設計。「軽量」「非重複」を守れるか）",
+      "prompt": "README.md・patterns/README.md・各パターンの README.md を読み、既存がカバーしていない領域を1つ選び、新しい軽量パターンを1案提案。目的／適用範囲と境界／失敗モード／検証方法を含め、既存パターン名を挙げて非重複を説明。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns"
+    },
+    {
+      "id": "D2",
+      "title": "統合判断",
+      "description": "Lightweight Feature と Micro Bugfix の2ハーネスを統合すべきか、両論＋推奨（設計判断）",
+      "prompt": "patterns/claude-code-lightweight-feature-harness/README.md と patterns/claude-code-micro-bugfix-harness/README.md を読み、統合すべきか判断。両論の根拠＋推奨1つ。",
+      "cwd": "/Users/dtakamiya/work/claudecode-harness-patterns"
+    },
+    {
+      "id": "H1",
+      "title": "HTML: ポモドーロ",
+      "description": "ポモドーロタイマーアプリ（単一HTML）",
+      "kind": "html",
+      "prompt": "単一ファイル index.html（HTML/CSS/JSベタ書き、外部ライブラリ・CDN不使用）でポモドーロタイマーWebアプリを作成。要件: 作業/短い休憩/長い休憩の切替、開始・一時停止・リセット、円形プログレス表示、時間設定の変更、完了回数カウント、ダークモード対応、レスポンシブ。ファイルを書いたら完了。説明は不要。"
+    },
+    {
+      "id": "H2",
+      "title": "HTML: カンバン",
+      "description": "カンバンボードアプリ（単一HTML・D&D）",
+      "kind": "html",
+      "prompt": "単一ファイル index.html（HTML/CSS/JSベタ書き、外部ライブラリ・CDN不使用）でカンバンボードWebアプリを作成。要件: ToDo/進行中/完了の3列、カード追加・編集・削除、ドラッグ&ドロップで列移動、localStorage保存、ダークモード対応、レスポンシブ。ファイルを書いたら完了。説明は不要。"
+    }
+  ]
+}
