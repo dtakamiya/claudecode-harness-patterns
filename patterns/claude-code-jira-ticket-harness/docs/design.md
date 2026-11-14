@@ -70,12 +70,14 @@ get_issue_revision(issue_key)
 publish_clarification(issue_key, snapshot_revision, body, idempotency_key)
 publish_result(issue_key, snapshot_revision, result, idempotency_key)
 transition_issue(issue_key, expected_status, new_status, idempotency_key)
+propose_issue(template_id, body, proposal_digest, idempotency_key)
 ```
 
 - `jql_id`は管理者が定義したquery allowlistのIDとし、Agent生成の任意JQLを受け付けない。
 - `requested_fields`はsummary、description、acceptance criteria、issue type、priority、labels、components、links、status、assignee、updated等のallowlistに限定する。
 - コメント本文は定型schemaから生成し、秘密値、生ログ、Jiraから取得した命令文を転載しない。
 - 遷移は`expected_status`と許可された遷移表を満たす場合だけ実行する。
+- `propose_issue`は、Human Gate PolicyのJira限定grantが有効な場合だけ使える拡張verbとする。project、issue type、ラベル、初期statusは`template_id`に固定し、Agentから指定させない。詳細は7.4に定める。
 - すべてのcallにactor、run ID、issue ID、revision、結果、Jira request IDを記録する。
 
 ### 3.2 受付方式
@@ -360,12 +362,20 @@ signature: hmac-sha256:...
 
 ## 8. 権限・不信頼入力・秘密情報
 
+### 7.4 提案起票の拡張
+
+[Scheduled Refactoring Harness](../../claude-code-scheduled-refactoring-harness/docs/design.md)など、Jira限定grantで提案起票を許可したハーネスだけが使う。`development`・`incident`のrouteとは別の`proposal` entryとし、既存のroute別schemaを変えない。
+
+- payloadは`template_id`、本文、`proposal_digest`だけとし、project、issue type、ラベル、初期statusはtemplateで固定する。任意fieldは受け付けない。
+- Jiraのissue作成には冪等キーがないため、at-least-once配信で重複起票し得る。`proposal_digest`を所定のラベルまたはfieldへ保存し、workerは送信直前にそのdigestで検索して、存在しない場合だけ作成する。
+- 起票は実行対象のJQLから除外される初期statusでのみ行う。grant、template、digest検索のいずれかを検証できなければfail-closedとする。
+
 ### 8.1 credential分離
 
 | credential | 許可 | 禁止 |
 |---|---|---|
 | `read_credential` | allowlist projectのissue、field、link、必要なcommentの読取り | コメント、遷移、assignee変更、管理API |
-| `write_credential` | 専用workerによる定型commentと許可transition | issue削除、workflow変更、project管理、任意field更新 |
+| `write_credential` | 専用workerによる定型commentと許可transition。Jira限定grantがある場合だけ、7.4の固定templateによる提案起票 | issue削除、workflow変更、project管理、任意field更新 |
 
 - `read_credential`と`write_credential`は別service accountまたは別scopeとする。
 - tokenをAgent prompt、TicketSnapshot、command line、log、Git差分へ含めない。

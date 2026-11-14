@@ -19,8 +19,8 @@ permission promptの数を増やすこと自体は安全性を高めない。承
 | Tier | 扱い | 代表例 |
 |---|---|---|
 | Tier 0 | 自動実行 | read-only調査、ローカルtest・lint・typecheck・build |
-| Tier 1 | 自動実行し、監査記録とサンプリングレビューを行う | スコープ内のコード・テスト変更、feature branch、ローカルcommit、有効なpre-authorization grantに束縛されたprivate repositoryのfeature branchへのpush・draft PR |
-| Tier 2 | 一名の適格な承認者が事前承認する | protected branchへのmerge、通常の依存追加、Jira遷移・外部writeback、public repositoryまたは外部公開を伴うPR |
+| Tier 1 | 自動実行し、監査記録とサンプリングレビューを行う | スコープ内のコード・テスト変更、feature branch、ローカルcommit、有効なpre-authorization grantに束縛されたprivate repositoryのfeature branchへのpush・draft PR、Jira限定grantに束縛した提案起票・固定遷移・定型コメント |
+| Tier 2 | 一名の適格な承認者が事前承認する | protected branchへのmerge、通常の依存追加、Jira限定grantの範囲外のJira遷移・外部writeback、public repositoryまたは外部公開を伴うPR |
 | Tier 3 | 独立した二名承認と操作単位の実行制御を行う | 本番・共有データへ適用するmigration、認証・認可・秘密情報境界、破壊的API、広範囲またはrollback困難な変更 |
 | Tier 4 | 通常ハーネスでは禁止し、専用手順へ移す | セキュリティインシデント、無制限credential、承認対象を固定できない不可逆操作 |
 
@@ -36,6 +36,8 @@ permission promptの数を増やすこと自体は安全性を高めない。承
 | 制御面ゲート | rules、Skills、Hooks、Runner、permissions、権限分類器（classifier）設定、auto modeの有効・無効、品質ゲート変更前 | ハーネス自身の信頼境界を変更してよいか | 所有者承認と独立Harness Reviewが完了 |
 
 feature branch作成、ローカルcommit、スコープ内の編集ごとには人間承認を要求しない。権限分類器（classifier）およびauto modeは、要件ゲート、リスク受容ゲート、外部反映ゲート、制御面ゲートのいずれも代替しない。分類器はスコープ内のTier 0/1操作の自動実行を支えるだけであり、必須ヒューマンゲートは分類器のPASS有無にかかわらず通過を要する。auto mode有効時はサブエージェントのfrontmatterの`permissionMode`が無視され、子agentの各アクションは親と同じ分類器判定を受ける。したがってサブエージェントに、より緩い`permissionMode`を与えて必須ゲートやTier 2以上の操作を迂回させることはできず、そのような迂回を前提に設計してはならない。Tier 1のpushやdraft PRはprivate repositoryに限り、機械検証可能なpre-authorization grantにgrant ID、発行者identity、grantee/workload identity、task/run ID、目的、明示的なPR作成Intent、発行時刻、期限、最大使用回数、取消状態、repository ID、source branch・commitまたはscope、branch名前空間、許可する操作種別、PRの可視性、許容するCI・通知・preview等の連携副作用を固定した場合だけ自動化できる。grantは信頼済み鍵による署名またはMAC、もしくはACL保護されたauthority store内のgrant IDと固定digestで認証し、裸のdigestだけを認証根拠にしない。実行直前に認証結果、利用主体、現在task、期限、使用回数、取消状態、実対象を照合し、各使用を監査記録する。不一致は`fail-closed`とする。現在taskのPR作成Intentを証明できない場合、または条件を一つでも満たさないPR作成はTier 2とし、protected branchへのmerge、release、本番変更へ許可を継承してはならない。
+
+Jiraへの外部writebackのうち、次の3種類に限り、Jira限定grantに束縛したTier 1として自動化できる。(1) 実行対象の選択条件から除外される状態での提案チケットの起票、(2) grantに列挙したfromとtoの組だけの遷移、(3) grantに列挙した定型テンプレートのコメント。いずれもAgent外のoutbox workerが送信し、Agentへwrite credentialを渡さない。Jira限定grantは、上記PR grantと同じ認証、識別、期限、最大使用回数、取消状態、監査の要件に加え、Jira project、issue type、付与するラベル、初期status、許可する遷移のfromとto、expected status、日次上限件数を固定する。実行可の印は、workflow上AIのidentityが遷移できないstatusとし、付与者を制限できないラベルを使わない。起票はその印を持たない状態でのみ行い、AIが起票したチケットをAIが実行対象として選べてはならない。レビュー依頼に相当する遷移は、対象MRのレビュー済みcommit SHAでpipeline成功を機械検証できた場合だけ行う。すべての遷移はexpected statusを条件とする冪等な書込みとする。PR grantとJira限定grantは別のgrantとし、同じ`task/run ID`を固定する。条件を一つでも満たさないJira writebackはTier 2とし、他の遷移、merge、release、本番変更へ許可を継承してはならない。Jira限定grantの発行は、grantに列挙した操作についての外部反映ゲートの事前承認とみなし、列挙外の操作には及ばない。Jira限定grantの導入と変更は制御面ゲートの対象とする。
 
 ## 4. Decision Packet
 
