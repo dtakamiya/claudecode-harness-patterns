@@ -15,6 +15,7 @@ Claude Codeを利用した開発ハーネスの再利用可能な設計パター
 - [Loop State Handoff](patterns/loop-state-handoff.md) — 無人ループが回をまたいで作業状態を引き継ぐため、状態の書込みをスクリプトに限り、1回1項目・項目lease・短い引継ぎメモで受け渡す規約
 - [Loop Completion Events](patterns/loop-completion-events.md) — 無人ループの子が終了時に必ず完了イベントを残し、親は見回りや催促をせず、イベントと期限切れの判定で結果を受け取る規約
 - [Loop Model Escalation](patterns/loop-model-escalation.md) — 無人ループの各試行のモデルとeffortを作業の種類で決めた安い段から始め、決定論的な検証に落ちたときだけ1段上げる規約
+- [Outer Loop Closure](patterns/outer-loop-closure.md) — 人間が定型プロンプトで回していた出荷（commit〜merge）と指示ファイルの調整を、レビュー判定・修正上限・承認の失効・効果測定を持つループに置き換える規約
 - [Change Intent Record](patterns/change-intent-record.md) — AI支援変更の目的、設計上の理由、制約、検証可能なリンクを短く残す共通規約
 - [Claude Code Cookbook Harness](patterns/claude-code-cookbook-harness/README.md) — ハーネスを能力の配布物として構成し、二面公開、権限拘束ロール、構造検証で一貫性を保つパターン
 - [Claude Code Review Skill](patterns/claude-code-review-skill/README.md) — 工程非依存の汎用レビュースキルを、反証ゲートと権限拘束でprecision優先に設計するパターン
