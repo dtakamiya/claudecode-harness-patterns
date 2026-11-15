@@ -9,7 +9,7 @@
 
 適用対象は、人間が毎回の結果を見ない無人ループすべてである。開発サイクル（バックログから1項目を実装する）、定期レポート、監視ジョブを含む。人間承認の扱いは[Human Gate Policy](human-gate-policy.md)を正本とし、本ポリシーはそれを変更しない。
 
-対象外: バックログ項目の受け渡し形式は[Loop State Handoff](loop-state-handoff.md)で定める。子セッション完了のイベント駆動化は、本ポリシーの実行記録を前提に別途定める。
+対象外: バックログ項目の受け渡し形式は[Loop State Handoff](loop-state-handoff.md)で定める。子セッション完了のイベント駆動化は[Loop Completion Events](loop-completion-events.md)で定める。
 
 ## 2. 観測した問題
 
